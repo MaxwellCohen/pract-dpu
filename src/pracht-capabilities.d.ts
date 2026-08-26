@@ -4,29 +4,8 @@ import type { CapabilityClientMethod } from "@pracht/core";
 
 declare module "@pracht/core" {
   interface Register {
-    capabilities: {
-      /**
-       * Counter increment
-       *
-       * Increment the demo counter cookie and return the new count.
-       */
-      "counter.increment": {
-        input: Record<string, never>;
-        output: { "count": number; [key: string]: unknown; };
-        effect: "write";
-        exposed: { http: true; webmcp: false; mcp: false };
-      };
-    };
-    capabilityClient: {
-      "counter": {
-        /**
-         * Counter increment
-         *
-         * Increment the demo counter cookie and return the new count.
-         */
-        "increment": CapabilityClientMethod<"counter.increment">;
-      };
-    };
+    capabilities: Record<never, never>;
+    capabilityClient: Record<never, never>;
   }
 }
 

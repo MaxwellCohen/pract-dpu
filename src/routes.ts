@@ -6,10 +6,6 @@ export const app = defineApp({
   },
   middleware: {
     "no-js": "./middleware/no-js.ts",
-    "counter-cookie": "./middleware/counter-cookie.ts",
-  },
-  capabilities: {
-    "counter.increment": "./capabilities/counter-increment.ts",
   },
 
   routes: [

@@ -34,7 +34,7 @@ DPU lands). With JS on, the island script swaps them in.
 
 | Route | What it shows |
 |-------|----------------|
-| `/basic` | One boundary around a slow panel with a Pracht capability counter |
+| `/basic` | One boundary around a slow panel |
 | `/parallel` | Sibling boundaries that resolve independently |
 | `/nested` | Outer shell streams, then inner content inside it |
 | `/out-of-order` | Fast panel streams before a slower sibling finishes |

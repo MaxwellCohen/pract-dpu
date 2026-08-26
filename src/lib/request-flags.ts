@@ -4,7 +4,6 @@ import { sleep } from "./sleep";
 export type RequestFlags = {
   noJs: boolean;
   path: string;
-  counter: number;
   /** Per-request Suspense resources so each navigation streams fresh delays. */
   resources: Map<string, { read(): unknown }>;
 };
@@ -12,7 +11,6 @@ export type RequestFlags = {
 const defaults: RequestFlags = {
   noJs: false,
   path: "/",
-  counter: 0,
   resources: new Map(),
 };
 

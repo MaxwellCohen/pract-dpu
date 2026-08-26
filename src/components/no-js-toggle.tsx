@@ -1,4 +1,4 @@
-import { NO_JS_PATH } from "../lib/no-js";
+import { NO_JS_COOKIE, NO_JS_PATH, readCookie } from "../lib/no-js";
 import { getRequestFlags } from "../lib/request-flags";
 
 /**
@@ -6,7 +6,15 @@ import { getRequestFlags } from "../lib/request-flags";
  * turns into `Content-Security-Policy: script-src 'none'`.
  */
 export function NoJsToggle() {
-  const { noJs: enabled, path } = getRequestFlags();
+  // Prefer live browser values on the client so hydration matches SSR
+  // (module-level request flags are server-middleware-only).
+  const flags = getRequestFlags();
+  const enabled =
+    typeof document !== "undefined"
+      ? readCookie(document.cookie, NO_JS_COOKIE) === "1"
+      : flags.noJs;
+  const path =
+    typeof window !== "undefined" ? window.location.pathname || "/" : flags.path;
 
   return (
     <form

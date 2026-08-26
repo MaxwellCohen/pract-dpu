@@ -2,7 +2,6 @@ import { type MiddlewareFn } from "@pracht/core";
 import {
   CSP_DISABLE_JS,
   isNoJsEnabled,
-  readCounter,
 } from "../lib/no-js";
 import {
   clearRequestFlags,
@@ -54,9 +53,8 @@ function withFlagsLifetime(response: Response): Response {
 export const middleware: MiddlewareFn = async ({ request, url }, next) => {
   const noJs = isNoJsEnabled(request);
   const path = url.pathname || "/";
-  const counter = readCounter(request);
 
-  setRequestFlags({ noJs, path, counter });
+  setRequestFlags({ noJs, path });
   try {
     const response = await next();
     const withLifetime = withFlagsLifetime(response);

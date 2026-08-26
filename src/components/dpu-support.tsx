@@ -1,5 +1,4 @@
 import { Suspense } from "@pracht/core";
-import { CounterForm } from "./counter-form";
 import { readSleep } from "../lib/request-flags";
 
 function StreamProbeFallback() {
@@ -18,14 +17,6 @@ function StreamProbeResult() {
     <div class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm text-emerald-950">
       <span class="font-bold">Stream resolved</span> — this message arrived in a
       later HTML chunk and replaced the loading fallback.
-      <p class="mt-2 opacity-80">
-        Try the counter below: each click runs a Pracht capability (
-        <code>counter.increment</code>) and updates the count — works without
-        JavaScript.
-      </p>
-      <div class="mt-2">
-        <CounterForm />
-      </div>
     </div>
   );
 }

@@ -4,7 +4,7 @@ const examples = [
   {
     route: "basic",
     title: "Basic boundary",
-    body: "One Suspense boundary around a slow panel. Shell paints first; content and a Pracht capability counter stream in.",
+    body: "One Suspense boundary around a slow panel. Shell paints first; content streams in.",
   },
   {
     route: "parallel",

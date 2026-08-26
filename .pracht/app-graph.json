@@ -123,41 +123,7 @@
       "path": "/api/no-js"
     }
   ],
-  "capabilities": [
-    {
-      "agentPolicy": null,
-      "description": "Increment the demo counter cookie and return the new count.",
-      "effect": "write",
-      "hasUi": false,
-      "httpPath": "/api/capabilities/counter/increment",
-      "input": {
-        "type": "object",
-        "properties": {},
-        "additionalProperties": false
-      },
-      "middleware": [
-        "counter-cookie"
-      ],
-      "name": "counter.increment",
-      "output": {
-        "type": "object",
-        "properties": {
-          "count": {
-            "type": "integer",
-            "minimum": 0
-          }
-        },
-        "required": [
-          "count"
-        ]
-      },
-      "source": "./capabilities/counter-increment.ts",
-      "title": "Counter increment",
-      "transports": [
-        "http"
-      ]
-    }
-  ],
+  "capabilities": [],
   "mcpEndpoint": null,
   "constraints": []
 }
