@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "pracht": {
+      "command": "npx",
+      "args": [
+        "--no-install",
+        "pracht",
+        "mcp"
+      ]
+    }
+  }
+}
