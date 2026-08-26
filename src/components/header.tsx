@@ -13,7 +13,7 @@ export function Header() {
     <header class="border-b border-zinc-200 bg-white/90 px-6 py-4 backdrop-blur lg:sticky lg:top-0 lg:z-10">
       <div class="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 class="text-lg font-bold tracking-tight">
-          <Link route="home">Preact · Suspense streaming</Link>
+          <Link route="home">Preact · streaming / DPU</Link>
         </h2>
         <nav class="flex flex-wrap gap-x-4 gap-y-2 text-sm">
           {links.map((link) => (

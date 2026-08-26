@@ -1,0 +1,102 @@
+{
+  "name": "@pracht/core",
+  "version": "0.15.0-streaming.pr340",
+  "description": "Core runtime for Pracht, a full-stack Preact framework with per-route SSR, SSG, ISG, SPA, loaders, and API routes.",
+  "keywords": [
+    "pracht",
+    "preact",
+    "framework",
+    "full-stack",
+    "ssr",
+    "ssg",
+    "isg",
+    "routing",
+    "loaders",
+    "api-routes"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/JoviDeCroock/pracht/tree/main/packages/framework",
+  "bugs": {
+    "url": "https://github.com/JoviDeCroock/pracht/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JoviDeCroock/pracht",
+    "directory": "packages/framework"
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": [
+    "./dist/prerender.mjs"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "browser": "./dist/browser.mjs",
+      "default": "./dist/index.mjs"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.mts",
+      "default": "./dist/browser.mjs"
+    },
+    "./client": {
+      "types": "./dist/client.d.mts",
+      "default": "./dist/client.mjs"
+    },
+    "./manifest": {
+      "types": "./dist/manifest.d.mts",
+      "default": "./dist/manifest.mjs"
+    },
+    "./env": {
+      "types": "./dist/env.d.mts",
+      "default": "./dist/env.mjs"
+    },
+    "./env/server": {
+      "types": "./dist/env-server.d.mts",
+      "worker": "./dist/env-server.mjs",
+      "browser": "./dist/env-server.browser.mjs",
+      "default": "./dist/env-server.mjs"
+    },
+    "./server": {
+      "types": "./dist/server.d.mts",
+      "default": "./dist/server.mjs"
+    },
+    "./agent-auth": {
+      "types": "./dist/agent-auth-sign.d.mts",
+      "default": "./dist/agent-auth-sign.mjs"
+    },
+    "./islands-client": {
+      "types": "./dist/islands-client.d.mts",
+      "default": "./dist/islands-client.mjs"
+    },
+    "./error-overlay": {
+      "types": "./dist/error-overlay.d.mts",
+      "default": "./dist/error-overlay.mjs"
+    },
+    "./dev-404": {
+      "types": "./dist/dev-404.d.mts",
+      "default": "./dist/dev-404.mjs"
+    },
+    "./devtools": {
+      "types": "./dist/devtools.d.mts",
+      "default": "./dist/devtools.mjs"
+    }
+  },
+  "publishConfig": {
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsdown",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@pracht/capabilities": "file:../capabilities",
+    "@standard-schema/spec": "^1.0.0"
+  },
+  "peerDependencies": {
+    "preact": "^10.0.0 || ^11.0.0-0",
+    "preact-render-to-string": "^6.7.0"
+  }
+}

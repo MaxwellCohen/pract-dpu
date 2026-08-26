@@ -1,0 +1,51 @@
+{
+  "name": "@pracht/cli",
+  "version": "1.11.2-streaming.pr340",
+  "description": "CLI for developing, building, validating, inspecting, and scaffolding Pracht apps.",
+  "keywords": [
+    "pracht",
+    "preact",
+    "cli",
+    "vite",
+    "ssr",
+    "scaffold",
+    "inspect",
+    "doctor",
+    "framework"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/JoviDeCroock/pracht/tree/main/packages/cli",
+  "bugs": {
+    "url": "https://github.com/JoviDeCroock/pracht/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JoviDeCroock/pracht",
+    "directory": "packages/cli"
+  },
+  "bin": {
+    "pracht": "./bin/pracht.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "type": "module",
+  "publishConfig": {
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsdown",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@pracht/capabilities": "file:../capabilities",
+    "@pracht/core": "file:../framework",
+    "citty": "^0.1.6",
+    "zod": "^4.4.3"
+  }
+}

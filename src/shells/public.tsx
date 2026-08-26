@@ -21,13 +21,13 @@ export function Shell({ children }: ShellProps) {
 
 export function head() {
   return {
-    title: "Preact · Suspense streaming",
+    title: "Preact · streaming / DPU",
     meta: [
       { content: "width=device-width, initial-scale=1", name: "viewport" },
       {
         name: "description",
         content:
-          "Examples of Preact Suspense HTML streaming with renderToReadableStream",
+          "Preact Suspense HTML streaming playground for Declarative Partial Updates experiments",
       },
     ],
     link: [

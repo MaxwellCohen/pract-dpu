@@ -17,8 +17,9 @@ const tones = {
 } as const;
 
 /**
- * Suspends for `delayMs` then paints a toned panel. Used inside `<Suspense>`
- * so the HTML stream can flush the fallback first, then the resolved UI.
+ * Suspends for `delayMs` then paints a toned panel. `readSleep` → `use(promise)`
+ * (React-style) so Suspense can stream the fallback first, then resolved UI
+ * (today via `<preact-island>`; later via DPU).
  */
 export function SlowPanel({
   label,

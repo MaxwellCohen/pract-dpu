@@ -24,7 +24,7 @@ const examples = [
 ] as const;
 
 export function head() {
-  return { title: "Preact · Suspense streaming" };
+  return { title: "Preact · streaming / DPU" };
 }
 
 export function Component() {
@@ -34,13 +34,21 @@ export function Component() {
         Preact · Pracht
       </p>
       <h1 class="mt-2 text-4xl font-bold tracking-tight">
-        Suspense streaming examples
+        Streaming playground for DPU
       </h1>
       <p class="mt-3 max-w-2xl text-zinc-600">
-        Each page uses <code class="text-sm">render: &apos;ssr&apos;</code> and
-        panels inside <code class="text-sm">&lt;Suspense&gt;</code> so the HTML
-        stream can flush fallbacks, then patch in resolved UI via stock Preact
-        streaming (<code class="text-sm">&lt;preact-island&gt;</code>).
+        Pages use plain <code class="text-sm">&lt;Suspense&gt;</code> + thrown
+        promises so the HTML stream flushes fallbacks, then patches in resolved
+        UI. Today that patch is stock{" "}
+        <code class="text-sm">&lt;preact-island&gt;</code>; this app exists to
+        swap that path for{" "}
+        <a
+          class="underline underline-offset-2"
+          href="https://developer.chrome.com/blog/declarative-partial-updates"
+        >
+          Declarative Partial Updates
+        </a>
+        .
       </p>
 
       <ul class="mt-10 divide-y divide-zinc-200 border-y border-zinc-200">

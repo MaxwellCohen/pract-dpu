@@ -1,12 +1,12 @@
 {
   "dependencies": {
-    "@pracht/adapter-vercel": "^0.3.1",
-    "@pracht/capabilities": "^0.2.0",
-    "@pracht/core": "^0.15.0"
+    "@pracht/adapter-vercel": "file:vendor/pracht-streaming-pr/adapter-vercel",
+    "@pracht/capabilities": "file:vendor/pracht-streaming-pr/capabilities",
+    "@pracht/core": "file:vendor/pracht-streaming-pr/framework"
   },
   "devDependencies": {
-    "@pracht/cli": "^1.11.2",
-    "@pracht/vite-plugin": "^0.10.0",
+    "@pracht/cli": "file:vendor/pracht-streaming-pr/cli",
+    "@pracht/vite-plugin": "file:vendor/pracht-streaming-pr/vite-plugin",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.3.0",
     "preact": "^11.0.0-rc.1",
@@ -19,7 +19,7 @@
   "name": "pract-dpu",
   "private": true,
   "scripts": {
-    "postinstall": "node scripts/patch-pracht-stream.mjs",
+    "sync:pracht-pr": "node scripts/sync-pracht-streaming-pr.mjs",
     "build": "pracht build",
     "dev": "pracht dev",
     "typecheck": "tsc --noEmit",

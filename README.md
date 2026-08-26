@@ -1,12 +1,13 @@
-# Suspense streaming (Preact / Pracht)
+# Preact streaming / DPU playground
 
-Demo app for **out-of-the-box Preact Suspense HTML streaming** via
-`preact-render-to-string`’s `renderToReadableStream`: shell + fallbacks first,
-then `<preact-island>` patches as each boundary resolves (JS applies the swap).
+Harness for experimenting with **Preact Suspense HTML streaming** and swapping
+stock `<preact-island>` patches for
+[Declarative Partial Updates (DPU)](https://developer.chrome.com/blog/declarative-partial-updates).
 
-Page map matches the React + Waku / DPU twin so you can A/B behaviors. Native
-[Declarative Partial Updates (DPU)](https://developer.chrome.com/blog/declarative-partial-updates)
-markers are **not** wired yet — that comes later.
+Demos are plain `<Suspense>` + thrown promises — not Pracht `defer()` /
+`use()`. Streaming SSR comes from a vendored build of
+[Pracht PR #340](https://github.com/JoviDeCroock/pracht/pull/340)
+(`streaming: true`). Refresh with `npm run sync:pracht-pr`.
 
 ## Setup
 
@@ -15,39 +16,28 @@ npm install
 npm run dev
 ```
 
-Open the URL printed by the dev server (often `http://localhost:3001` if
-`:3000` is already taken).
-
 ## Verify streaming
 
 1. DevTools → Network → the document → **Response** (not `view-source:`)
-2. Reload — you should see `<!--$s:…-->` / loading fallback first
-3. ~1s later a `<preact-island>` chunk with the resolved UI
-
-`view-source:` waits for the full response, then shows both halves in one
-static document — use the Network panel to watch chunks arrive.
-
-With **Turn JS off**, fallbacks stay after the stream finishes (expected until
-DPU lands). With JS on, the island script swaps them in.
+2. Reload — fallbacks first (`<!--$s:…-->`), then `<preact-island>` (or your DPU markers)
 
 ## Examples
 
 | Route | What it shows |
 |-------|----------------|
-| `/basic` | One boundary around a slow panel |
-| `/parallel` | Sibling boundaries that resolve independently |
-| `/nested` | Outer shell streams, then inner content inside it |
-| `/out-of-order` | Fast panel streams before a slower sibling finishes |
-| `/grid` | Stress grid of 100 Suspense cells (not linked from nav) |
+| `/basic` | One Suspense boundary |
+| `/parallel` | Sibling boundaries resolve independently |
+| `/nested` | Outer then inner |
+| `/out-of-order` | Fast sibling before slow |
+| `/grid` | 100 Suspense cells |
 
-## Notes
+## Where to hack DPU
 
-This app patches `@pracht/core` / `@pracht/vite-plugin` on `postinstall`
-(`scripts/patch-pracht-stream.mjs`) so SSR uses `renderToReadableStream`
-instead of buffered `renderToStringAsync`, and so the Vite dev middleware
-**pipes** HTML instead of `await response.text()`. Re-run
-`node scripts/patch-pracht-stream.mjs` after reinstalling deps.
+Today `preact-render-to-string` emits Suspense markers + `<preact-island>` and
+the browser CE swaps them in. To try DPU, alias or patch:
 
-Suspense for streaming SSR comes from `preact/compat` (aliased over
-`preact-suspense` in `vite.config.ts`) because that implementation drives the
-chunked stream renderer today.
+- `preact` / `preact-render-to-string` (what the stream emits)
+- client apply path (stock island CE vs DPU)
+
+Keep page components on Suspense so the only moving part is how resolved HTML
+is applied.

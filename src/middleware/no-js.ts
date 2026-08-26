@@ -1,52 +1,15 @@
 import { type MiddlewareFn } from "@pracht/core";
-import {
-  CSP_DISABLE_JS,
-  isNoJsEnabled,
-} from "../lib/no-js";
-import {
-  clearRequestFlags,
-  setRequestFlags,
-} from "../lib/request-flags";
+import { CSP_DISABLE_JS, isNoJsEnabled } from "../lib/no-js";
+import { clearRequestFlags, setRequestFlags } from "../lib/request-flags";
 
 function withCsp(response: Response): Response {
+  // Reuse the same body stream so Pracht's streaming WeakSet still matches.
   const headers = new Headers(response.headers);
   headers.set("Content-Security-Policy", CSP_DISABLE_JS);
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
     headers,
-  });
-}
-
-/** Keep request flags alive until a streaming body finishes (or errors). */
-function withFlagsLifetime(response: Response): Response {
-  if (!response.body) {
-    clearRequestFlags();
-    return response;
-  }
-
-  let cleared = false;
-  const clearOnce = () => {
-    if (cleared) return;
-    cleared = true;
-    clearRequestFlags();
-  };
-
-  const body = response.body.pipeThrough(
-    new TransformStream({
-      transform(chunk, controller) {
-        controller.enqueue(chunk);
-      },
-      flush() {
-        clearOnce();
-      },
-    }),
-  );
-
-  return new Response(body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: response.headers,
   });
 }
 
@@ -57,9 +20,12 @@ export const middleware: MiddlewareFn = async ({ request, url }, next) => {
   setRequestFlags({ noJs, path });
   try {
     const response = await next();
-    const withLifetime = withFlagsLifetime(response);
-    if (!noJs) return withLifetime;
-    return withCsp(withLifetime);
+    // Do not clear flags or wrap `response.body` here. Streaming SSR keeps
+    // resolving Suspense after `next()` returns, and Pracht identifies stream
+    // responses via a WeakSet on the original body. The next request overwrites
+    // the module-scoped flags.
+    if (!noJs) return response;
+    return withCsp(response);
   } catch (error) {
     clearRequestFlags();
     throw error;

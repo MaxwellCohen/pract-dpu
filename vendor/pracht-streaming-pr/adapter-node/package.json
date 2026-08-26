@@ -1,0 +1,47 @@
+{
+  "name": "@pracht/adapter-node",
+  "version": "0.4.1-streaming.pr340",
+  "description": "Node.js adapter for serving Pracht apps with Web Request/Response, static assets, and ISG revalidation.",
+  "keywords": [
+    "pracht",
+    "preact",
+    "node",
+    "nodejs",
+    "adapter",
+    "server",
+    "ssr",
+    "ssg",
+    "isg",
+    "vite"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/JoviDeCroock/pracht/tree/main/packages/adapter-node",
+  "bugs": {
+    "url": "https://github.com/JoviDeCroock/pracht/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JoviDeCroock/pracht",
+    "directory": "packages/adapter-node"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "publishConfig": {
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsdown",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@pracht/core": "file:../framework"
+  }
+}

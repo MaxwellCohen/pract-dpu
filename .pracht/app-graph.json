@@ -17,7 +17,8 @@
       "revalidate": null,
       "shell": "public",
       "shellFile": "./shells/public.tsx",
-      "speculation": null
+      "speculation": null,
+      "streaming": true
     },
     {
       "file": "./routes/basic.tsx",
@@ -34,7 +35,8 @@
       "revalidate": null,
       "shell": "public",
       "shellFile": "./shells/public.tsx",
-      "speculation": null
+      "speculation": null,
+      "streaming": true
     },
     {
       "file": "./routes/grid.tsx",
@@ -51,7 +53,8 @@
       "revalidate": null,
       "shell": "public",
       "shellFile": "./shells/public.tsx",
-      "speculation": null
+      "speculation": null,
+      "streaming": true
     },
     {
       "file": "./routes/nested.tsx",
@@ -68,7 +71,8 @@
       "revalidate": null,
       "shell": "public",
       "shellFile": "./shells/public.tsx",
-      "speculation": null
+      "speculation": null,
+      "streaming": true
     },
     {
       "file": "./routes/out-of-order.tsx",
@@ -85,7 +89,8 @@
       "revalidate": null,
       "shell": "public",
       "shellFile": "./shells/public.tsx",
-      "speculation": null
+      "speculation": null,
+      "streaming": true
     },
     {
       "file": "./routes/parallel.tsx",
@@ -102,7 +107,8 @@
       "revalidate": null,
       "shell": "public",
       "shellFile": "./shells/public.tsx",
-      "speculation": null
+      "speculation": null,
+      "streaming": true
     }
   ],
   "api": [

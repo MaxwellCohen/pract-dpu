@@ -1,11 +1,11 @@
-import { createResource } from "./resource";
+import { use } from "@pracht/core";
 import { sleep } from "./sleep";
 
 export type RequestFlags = {
   noJs: boolean;
   path: string;
-  /** Per-request Suspense resources so each navigation streams fresh delays. */
-  resources: Map<string, { read(): unknown }>;
+  /** Per-request promises so Suspense remounts reuse the same `use()` input. */
+  resources: Map<string, Promise<void>>;
 };
 
 const defaults: RequestFlags = {
@@ -16,9 +16,11 @@ const defaults: RequestFlags = {
 
 let current: RequestFlags = defaults;
 
-/** Server middleware sets this for the duration of a request render. */
+/** Server middleware sets this for the request. */
 export function setRequestFlags(
-  flags: Omit<RequestFlags, "resources"> & { resources?: Map<string, { read(): unknown }> },
+  flags: Omit<RequestFlags, "resources"> & {
+    resources?: Map<string, Promise<void>>;
+  },
 ): void {
   current = {
     ...flags,
@@ -35,18 +37,20 @@ export function getRequestFlags(): RequestFlags {
 }
 
 /**
- * Suspend for `ms` once per request under `key`.
- * Server-only: the HTML stream already resolves these boundaries (and the
- * stream runtime applies `<preact-island>` patches before hydration), so the
- * client must render the resolved tree on first paint — not re-suspend.
+ * Suspend for `ms` once per request under `key`, via Pracht/React-style `use()`.
+ * That throw-until-settled path is what drives Suspense streaming.
+ * On the client, `use(undefined)` is a no-op — the document already resolved.
  */
 export function readSleep(key: string, ms: number): void {
-  if (typeof window !== "undefined") return;
-  const map = getRequestFlags().resources;
-  let resource = map.get(key);
-  if (!resource) {
-    resource = createResource(sleep(ms));
-    map.set(key, resource);
+  let ready: Promise<void> | undefined;
+  if (typeof window === "undefined") {
+    const map = getRequestFlags().resources;
+    let promise = map.get(key);
+    if (!promise) {
+      promise = sleep(ms);
+      map.set(key, promise);
+    }
+    ready = promise;
   }
-  resource.read();
+  use(ready);
 }

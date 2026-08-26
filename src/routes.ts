@@ -14,6 +14,7 @@ export const app = defineApp({
         middleware: ["no-js"],
         shell: "public",
         render: "ssr",
+        streaming: true,
       },
       [
         route("/", "./routes/home.tsx", { id: "home" }),
