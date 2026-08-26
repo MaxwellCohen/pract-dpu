@@ -1,0 +1,163 @@
+{
+  "prachtGraphVersion": 1,
+  "mode": "manifest",
+  "routes": [
+    {
+      "file": "./routes/home.tsx",
+      "hydration": null,
+      "id": "home",
+      "loaderCache": null,
+      "loaderFile": null,
+      "middleware": [
+        "no-js"
+      ],
+      "path": "/",
+      "prefetch": null,
+      "render": "ssr",
+      "revalidate": null,
+      "shell": "public",
+      "shellFile": "./shells/public.tsx",
+      "speculation": null
+    },
+    {
+      "file": "./routes/basic.tsx",
+      "hydration": null,
+      "id": "basic",
+      "loaderCache": null,
+      "loaderFile": null,
+      "middleware": [
+        "no-js"
+      ],
+      "path": "/basic",
+      "prefetch": null,
+      "render": "ssr",
+      "revalidate": null,
+      "shell": "public",
+      "shellFile": "./shells/public.tsx",
+      "speculation": null
+    },
+    {
+      "file": "./routes/grid.tsx",
+      "hydration": null,
+      "id": "grid",
+      "loaderCache": null,
+      "loaderFile": null,
+      "middleware": [
+        "no-js"
+      ],
+      "path": "/grid",
+      "prefetch": null,
+      "render": "ssr",
+      "revalidate": null,
+      "shell": "public",
+      "shellFile": "./shells/public.tsx",
+      "speculation": null
+    },
+    {
+      "file": "./routes/nested.tsx",
+      "hydration": null,
+      "id": "nested",
+      "loaderCache": null,
+      "loaderFile": null,
+      "middleware": [
+        "no-js"
+      ],
+      "path": "/nested",
+      "prefetch": null,
+      "render": "ssr",
+      "revalidate": null,
+      "shell": "public",
+      "shellFile": "./shells/public.tsx",
+      "speculation": null
+    },
+    {
+      "file": "./routes/out-of-order.tsx",
+      "hydration": null,
+      "id": "out-of-order",
+      "loaderCache": null,
+      "loaderFile": null,
+      "middleware": [
+        "no-js"
+      ],
+      "path": "/out-of-order",
+      "prefetch": null,
+      "render": "ssr",
+      "revalidate": null,
+      "shell": "public",
+      "shellFile": "./shells/public.tsx",
+      "speculation": null
+    },
+    {
+      "file": "./routes/parallel.tsx",
+      "hydration": null,
+      "id": "parallel",
+      "loaderCache": null,
+      "loaderFile": null,
+      "middleware": [
+        "no-js"
+      ],
+      "path": "/parallel",
+      "prefetch": null,
+      "render": "ssr",
+      "revalidate": null,
+      "shell": "public",
+      "shellFile": "./shells/public.tsx",
+      "speculation": null
+    }
+  ],
+  "api": [
+    {
+      "file": "/src/api/health.ts",
+      "hasDefaultHandler": false,
+      "methods": [
+        "GET"
+      ],
+      "path": "/api/health"
+    },
+    {
+      "file": "/src/api/no-js.ts",
+      "hasDefaultHandler": false,
+      "methods": [
+        "POST"
+      ],
+      "path": "/api/no-js"
+    }
+  ],
+  "capabilities": [
+    {
+      "agentPolicy": null,
+      "description": "Increment the demo counter cookie and return the new count.",
+      "effect": "write",
+      "hasUi": false,
+      "httpPath": "/api/capabilities/counter/increment",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "middleware": [
+        "counter-cookie"
+      ],
+      "name": "counter.increment",
+      "output": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "count"
+        ]
+      },
+      "source": "./capabilities/counter-increment.ts",
+      "title": "Counter increment",
+      "transports": [
+        "http"
+      ]
+    }
+  ],
+  "mcpEndpoint": null,
+  "constraints": []
+}

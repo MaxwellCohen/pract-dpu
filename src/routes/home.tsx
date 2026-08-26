@@ -1,32 +1,65 @@
-import type { LoaderArgs, RouteComponentProps } from "@pracht/core";
+import { Link } from "@pracht/core";
 
-export async function loader(_args: LoaderArgs) {
-  return {
-    adapter: "Vercel",
-    steps: [
-      "Edit src/routes/home.tsx to change this page.",
-      "Add more routes in src/routes.ts.",
-      "Add API handlers in src/api/*.ts.",
-    ],
-  };
+const examples = [
+  {
+    route: "basic",
+    title: "Basic boundary",
+    body: "One Suspense boundary around a slow panel. Shell paints first; content and a Pracht capability counter stream in.",
+  },
+  {
+    route: "parallel",
+    title: "Parallel boundaries",
+    body: "Sibling Suspense boundaries fetch independently and fill in as each promise resolves.",
+  },
+  {
+    route: "nested",
+    title: "Nested boundaries",
+    body: "Outer shell streams, then inner content streams inside the already-revealed parent.",
+  },
+  {
+    route: "out-of-order",
+    title: "Out-of-order reveal",
+    body: "Fast panel finishes after a slow one starts — HTML can stream completed sections as they ready.",
+  },
+] as const;
+
+export function head() {
+  return { title: "Preact · Suspense streaming" };
 }
 
-export function Component({ data }: RouteComponentProps<typeof loader>) {
+export function Component() {
   return (
-    <section>
-      <p style={{ color: "#555", marginBottom: "8px" }}>Starter ready.</p>
-      <h1 style={{ fontSize: "2.5rem", lineHeight: 1.1, margin: "0 0 16px" }}>Your pracht app is up and running.</h1>
-      <p style={{ fontSize: "1.1rem", lineHeight: 1.6, marginBottom: "24px" }}>
-        This starter is configured for <strong>{data.adapter}</strong>.
+    <div class="w-full max-w-3xl">
+      <p class="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+        Preact · Pracht
       </p>
-      <ul style={{ lineHeight: 1.8, paddingLeft: "20px" }}>
-        {data.steps.map((step) => (
-          <li key={step}>{step}</li>
+      <h1 class="mt-2 text-4xl font-bold tracking-tight">
+        Suspense streaming examples
+      </h1>
+      <p class="mt-3 max-w-2xl text-zinc-600">
+        Each page uses <code class="text-sm">render: &apos;ssr&apos;</code> and
+        panels inside <code class="text-sm">&lt;Suspense&gt;</code> so the HTML
+        stream can flush fallbacks, then patch in resolved UI via stock Preact
+        streaming (<code class="text-sm">&lt;preact-island&gt;</code>).
+      </p>
+
+      <ul class="mt-10 divide-y divide-zinc-200 border-y border-zinc-200">
+        {examples.map((example) => (
+          <li key={example.route}>
+            <Link
+              route={example.route}
+              class="block py-5 transition-colors hover:bg-white"
+            >
+              <span class="text-lg font-bold tracking-tight underline-offset-4">
+                {example.title}
+              </span>
+              <span class="mt-1 block text-sm text-zinc-600">
+                {example.body}
+              </span>
+            </Link>
+          </li>
         ))}
       </ul>
-      <p style={{ marginTop: "24px" }}>
-        Check <code>/api/health</code> for a simple API route.
-      </p>
-    </section>
+    </div>
   );
 }
