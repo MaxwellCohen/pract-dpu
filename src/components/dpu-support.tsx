@@ -13,7 +13,7 @@ function StreamProbeFallback() {
 }
 
 function StreamProbeResult() {
-  readSleep("stream-probe", 1000);
+  readSleep("stream-probe", 10);
   return (
     <div class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm text-emerald-950">
       <span class="font-bold">Stream resolved</span> — later HTML chunk replaced
