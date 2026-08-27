@@ -37,8 +37,8 @@ importers:
         specifier: ^11.0.0-rc.1
         version: 11.0.0-rc.1(preact-render-to-string@6.7.0)
       preact-render-to-string:
-        specifier: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/0bec9014/preact-render-to-string
-        version: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/0bec9014/preact-render-to-string(preact@11.0.0-rc.1)
+        specifier: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/654590f5/preact-render-to-string
+        version: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/654590f5/preact-render-to-string(preact@11.0.0-rc.1)
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3
@@ -2468,8 +2468,8 @@ packages:
     resolution: {integrity: sha512-u82N74LFzG8ca+dD8puPnplTXoGH4fTPpVGuIbt36G3qvNlkvfD0lEAZSxaly3KX8TS/L1A1gsCEmvKmBcVbkQ==}
     engines: {node: ^10 || ^12 || >=14}
 
-  preact-render-to-string@https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/0bec9014/preact-render-to-string:
-    resolution: {integrity: sha512-AVWrrdDs1yK8B2ERn1TX3lr0aebR/2jZCMCnEXfZd2kLFvczabQLSFD7dDAy8ensA4d654fv8UMkHjPfTkOjJQ==, tarball: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/0bec9014/preact-render-to-string}
+  preact-render-to-string@https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/654590f5/preact-render-to-string:
+    resolution: {integrity: sha512-xe7f0yyQ72Rmph4NSdP178R3QMYx0v7TxenIsrA1J/3Ru+QMPRauQ2BWNXLZP81QXUgopP4C0CJAA+YdVEY19w==, tarball: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/654590f5/preact-render-to-string}
     version: 6.7.0
     peerDependencies:
       preact: '>=10 || >= 11.0.0-0'
@@ -3502,12 +3502,12 @@ snapshots:
       '@pracht/capabilities': file:vendor/pracht-streaming-pr/capabilities
       '@standard-schema/spec': 1.1.0
       preact: 11.0.0-rc.1(preact-render-to-string@6.7.0)
-      preact-render-to-string: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/0bec9014/preact-render-to-string(preact@11.0.0-rc.1)
+      preact-render-to-string: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/654590f5/preact-render-to-string(preact@11.0.0-rc.1)
 
   '@pracht/preact-ssr-precompile@file:vendor/pracht-streaming-pr/preact-ssr-precompile(preact-render-to-string@6.7.0)(preact@11.0.0-rc.1)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))':
     dependencies:
       preact: 11.0.0-rc.1(preact-render-to-string@6.7.0)
-      preact-render-to-string: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/0bec9014/preact-render-to-string(preact@11.0.0-rc.1)
+      preact-render-to-string: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/654590f5/preact-render-to-string(preact@11.0.0-rc.1)
       rolldown: 1.2.6
       rolldown-string: 0.3.1(rolldown@1.2.6)
     optionalDependencies:
@@ -5184,13 +5184,13 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  preact-render-to-string@https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/0bec9014/preact-render-to-string(preact@11.0.0-rc.1):
+  preact-render-to-string@https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/654590f5/preact-render-to-string(preact@11.0.0-rc.1):
     dependencies:
       preact: 11.0.0-rc.1(preact-render-to-string@6.7.0)
 
   preact@11.0.0-rc.1(preact-render-to-string@6.7.0):
     optionalDependencies:
-      preact-render-to-string: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/0bec9014/preact-render-to-string(preact@11.0.0-rc.1)
+      preact-render-to-string: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/654590f5/preact-render-to-string(preact@11.0.0-rc.1)
 
   pretty-ms@7.0.1:
     dependencies:
