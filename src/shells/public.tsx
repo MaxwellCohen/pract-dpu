@@ -10,8 +10,8 @@ export function Shell({ children }: ShellProps) {
     <div class="min-h-svh bg-zinc-50 font-['Nunito'] text-zinc-900">
       <Header />
       <div class="mx-auto flex max-w-5xl flex-col gap-4 px-6 pt-6">
-        <DpuSupportBanner />
         <NoJsToggle />
+        <DpuSupportBanner />
       </div>
       <main class="mx-auto max-w-5xl px-6 py-10">{children}</main>
       <Footer />

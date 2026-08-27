@@ -2,7 +2,8 @@
   "dependencies": {
     "@pracht/adapter-vercel": "file:vendor/pracht-streaming-pr/adapter-vercel",
     "@pracht/capabilities": "file:vendor/pracht-streaming-pr/capabilities",
-    "@pracht/core": "file:vendor/pracht-streaming-pr/framework"
+    "@pracht/core": "file:vendor/pracht-streaming-pr/framework",
+    "i": "^0.3.7"
   },
   "devDependencies": {
     "@pracht/cli": "file:vendor/pracht-streaming-pr/cli",
@@ -10,7 +11,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.3.0",
     "preact": "^11.0.0-rc.1",
-    "preact-render-to-string": "^6.7.0",
+    "preact-render-to-string": "https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/0bec9014/preact-render-to-string",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vercel": "^59.5.0",
