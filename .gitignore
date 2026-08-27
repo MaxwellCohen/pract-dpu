@@ -1,4 +1,5 @@
-dist
+# App build output only — do not ignore vendor package dists (needed on Vercel).
+/dist
 node_modules
 .netlify
 .wrangler

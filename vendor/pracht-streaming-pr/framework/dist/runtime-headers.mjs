@@ -1,0 +1,175 @@
+import { ROUTE_STATE_CACHE_CONTROL, ROUTE_STATE_REQUEST_HEADER } from "./runtime-constants.mjs";
+import { CAPABILITY_FORM_REDIRECT_HEADER, CAPABILITY_FORM_REQUEST_HEADER } from "@pracht/capabilities";
+//#region src/runtime-headers.ts
+const HEADER_CRLF_RE = /[\r\n]/;
+/**
+* Reject header values containing CR/LF. Some runtimes (Node `undici`
+* Headers) throw on their own, but Web-runtime fetch implementations
+* vary, and a user-supplied `headers()` value is never trusted input.
+* Keeping the check here means response-splitting can't slip through on
+* any adapter.
+*/
+function assertSafeHeaderValue(name, value) {
+	if (HEADER_CRLF_RE.test(value)) throw new Error(`Refused to set header "${name}": value contains CR or LF`);
+}
+function applyHeaders(headers, init) {
+	for (const [key, value] of iterateHeaderInit(init)) assertSafeHeaderValue(key, value);
+	new Headers(init).forEach((value, key) => {
+		headers.set(key, value);
+	});
+}
+function* iterateHeaderInit(init) {
+	if (init instanceof Headers) {
+		for (const entry of init.entries()) yield entry;
+		return;
+	}
+	if (Array.isArray(init)) {
+		for (const entry of init) if (entry && entry.length >= 2) yield [entry[0], entry[1]];
+		return;
+	}
+	for (const [key, value] of Object.entries(init)) yield [key, value];
+}
+function applyDefaultSecurityHeaders(headers) {
+	if (!headers.has("permissions-policy")) headers.set("permissions-policy", "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()");
+	if (!headers.has("referrer-policy")) headers.set("referrer-policy", "strict-origin-when-cross-origin");
+	if (!headers.has("x-content-type-options")) headers.set("x-content-type-options", "nosniff");
+	if (!headers.has("x-frame-options")) headers.set("x-frame-options", "SAMEORIGIN");
+	return headers;
+}
+function applySecurityAndRouteHeaders(headers, options) {
+	applyDefaultSecurityHeaders(headers);
+	if (options) {
+		appendVaryHeader(headers, ROUTE_STATE_REQUEST_HEADER);
+		if (options.isRouteStateRequest && !headers.has("cache-control")) headers.set("cache-control", getRouteStateCacheControl(options.loaderCache));
+	}
+	return headers;
+}
+/**
+* True for responses that switch protocols instead of carrying a body —
+* chiefly the `101 Switching Protocols` handshake a WebSocket upgrade
+* returns.
+*
+* Such a response must be handed back to the runtime as the *same object*
+* the handler produced. Copying it via `new Response(body, init)` fails
+* twice over: the Response constructor rejects any status below 200, and
+* the `webSocket` property (Cloudflare Workers' handle on the server end of
+* the socket) is not part of `ResponseInit`, so it is silently dropped even
+* where the status is tolerated. Header post-processing is skipped for the
+* same reason — and costs nothing, because a handshake has no body for a
+* sniffing or framing policy to protect.
+*
+* Detection reads `webSocket` explicitly rather than using `in`, because
+* workerd defines a `webSocket` getter on `Response.prototype` — `in` is
+* true there for every response.
+*/
+function isProtocolSwitchResponse(response) {
+	return response.status < 200 || response.webSocket != null;
+}
+/**
+* Headers that already express a CDN caching policy. Any of them means the
+* author has decided; pracht adds nothing.
+*/
+const CDN_CACHE_CONTROL_HEADERS = [
+	"cache-control",
+	"cdn-cache-control",
+	"cloudflare-cdn-cache-control",
+	"netlify-cdn-cache-control",
+	"surrogate-control",
+	"vercel-cdn-cache-control"
+];
+/**
+* Stamp `Cache-Control: private, no-cache` on GET/HEAD responses that carry no
+* caching policy of their own.
+*
+* A shared cache in front of the app — Cloudflare's Workers Caching, a CDN, a
+* reverse proxy — may apply RFC 9111 heuristic freshness to a `200` that has no
+* `Cache-Control`, and `Cookie` is not part of its cache key. Without this, an
+* authenticated SSR page or an API `GET` can be stored and replayed to another
+* user. The hazard is a property of "shared cache in front of an origin", not
+* of any one platform, so every adapter applies the same default: leaving it to
+* Cloudflare alone meant an app hardened there silently lost the protection
+* when it moved to Node or Vercel.
+*
+* Anything that set its own policy passes through untouched: ISG responses,
+* route-state JSON, static assets, and user `headers()` exports or middleware.
+*/
+function preventHeuristicCaching(request, response) {
+	if (request.method !== "GET" && request.method !== "HEAD") return response;
+	if (isProtocolSwitchResponse(response)) return response;
+	for (const header of CDN_CACHE_CONTROL_HEADERS) if (response.headers.has(header)) return response;
+	try {
+		response.headers.set("cache-control", "private, no-cache");
+		return response;
+	} catch {
+		const headers = new Headers(response.headers);
+		headers.set("cache-control", "private, no-cache");
+		return new Response(response.body, {
+			status: response.status,
+			statusText: response.statusText,
+			headers
+		});
+	}
+}
+function withDefaultSecurityHeaders(response) {
+	if (isProtocolSwitchResponse(response)) return response;
+	const headers = new Headers(response.headers);
+	applySecurityAndRouteHeaders(headers);
+	return new Response(response.body, {
+		status: response.status,
+		statusText: response.statusText,
+		headers
+	});
+}
+/**
+* Keep enhanced Pracht form redirects inside the original same-origin fetch.
+* Both API-backed and capability-backed forms use this protocol. The client
+* performs the browser navigation after reading the target, so the destination
+* is not loaded twice and cross-origin login pages are never fetched through
+* CORS.
+*/
+function withEnhancedCapabilityFormRedirect(response, request) {
+	if (request.headers.get(CAPABILITY_FORM_REQUEST_HEADER) !== "1") return response;
+	if (response.status < 300 || response.status >= 400) return response;
+	const location = response.headers.get("location");
+	if (!location) return response;
+	const headers = new Headers(response.headers);
+	headers.delete("content-length");
+	headers.delete("location");
+	let redirectTarget = location;
+	try {
+		redirectTarget = new URL(location, request.url).toString();
+	} catch {}
+	headers.set(CAPABILITY_FORM_REDIRECT_HEADER, redirectTarget);
+	headers.set("cache-control", "no-store");
+	appendVaryHeader(headers, CAPABILITY_FORM_REQUEST_HEADER);
+	return new Response(null, {
+		status: 204,
+		headers
+	});
+}
+function withRouteResponseHeaders(response, options) {
+	if (isProtocolSwitchResponse(response)) return response;
+	const headers = new Headers(response.headers);
+	applySecurityAndRouteHeaders(headers, options);
+	return new Response(response.body, {
+		status: response.status,
+		statusText: response.statusText,
+		headers
+	});
+}
+function getRouteStateCacheControl(loaderCache) {
+	if (loaderCache === void 0 || loaderCache === false || loaderCache === 0) return ROUTE_STATE_CACHE_CONTROL;
+	return `private, max-age=${loaderCache}`;
+}
+function appendVaryHeader(headers, value) {
+	const current = headers.get("vary");
+	if (!current) {
+		headers.set("vary", value);
+		return;
+	}
+	const values = current.split(",").map((part) => part.trim().toLowerCase()).filter(Boolean);
+	if (values.includes("*") || values.includes(value.toLowerCase())) return;
+	headers.set("vary", `${current}, ${value}`);
+}
+//#endregion
+export { appendVaryHeader, applyDefaultSecurityHeaders, applyHeaders, applySecurityAndRouteHeaders, isProtocolSwitchResponse, preventHeuristicCaching, withDefaultSecurityHeaders, withEnhancedCapabilityFormRedirect, withRouteResponseHeaders };

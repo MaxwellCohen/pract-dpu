@@ -1,0 +1,1014 @@
+import { RouteConstraint } from "./constraints.mjs";
+import { PrachtFont } from "./font.mjs";
+import { Capability, CapabilityAgentPolicy, CapabilityContext, CapabilityEffect, CapabilityEffect as CapabilityEffect$1, CapabilityEnvelope, CapabilityEnvelope as CapabilityEnvelope$1, CapabilityErrorCode, CapabilityErrorPayload as CapabilityErrorPayload$1, CapabilityExposure, CapabilityHttpExposure, CapabilityIssue, CapabilityRunArgs, CapabilityValidationResult, PrachtAgentIdentity, PrachtAgentIdentity as PrachtAgentIdentity$1 } from "@pracht/capabilities";
+import { ComponentChildren, FunctionComponent } from "preact";
+
+//#region src/types.d.ts
+/**
+ * Augment this interface to register your app's context type globally.
+ * Once registered, all route args (`BaseRouteArgs`, `LoaderArgs`, etc.)
+ * will use your context type automatically — no per-file generics needed.
+ *
+ * ```ts
+ * // src/env.d.ts
+ * declare module "@pracht/core" {
+ *   interface Register {
+ *     context: { env: Env; executionContext: ExecutionContext };
+ *   }
+ * }
+ * ```
+ */
+interface Register {}
+/**
+ * Fields the framework itself surfaces on the request context, merged into
+ * the app-registered context type so loaders, middleware, API routes, and
+ * capabilities all see them without casts.
+ */
+interface PrachtContextExtensions {
+  /**
+   * Verified agent identity (Web Bot Auth); `null` when the request is
+   * unsigned or fails verification, absent when `defineApp({ agents })` is
+   * not configured.
+   */
+  readonly agent?: PrachtAgentIdentity | null;
+}
+type RegisteredContext = (Register extends {
+  context: infer T;
+} ? T : unknown) & PrachtContextExtensions;
+/**
+ * The request context as application code receives it — the registered
+ * context plus the framework-surfaced fields. Use it to type standalone
+ * functions (e.g. the third `defineCapability()` generic).
+ */
+type PrachtRequestContext = RegisteredContext;
+type RenderMode = "spa" | "ssr" | "ssg" | "isg";
+/**
+ * Per-route hydration mode.
+ *
+ * - `"full"` (default) — the whole page tree hydrates and the client router
+ *   takes over navigation. Existing behavior, zero change.
+ * - `"islands"` — only components from the islands directory (`src/islands/`)
+ *   hydrate; the rest of the page ships no JavaScript. Navigation to and from
+ *   these routes is regular full-document (MPA-style) navigation.
+ * - `"none"` — fully static output; no JavaScript is injected at all.
+ */
+type HydrationMode = "full" | "islands" | "none";
+/**
+ * Hydration strategy for one island usage, passed via the `client` prop:
+ *
+ * - `"load"` (default) — hydrate as soon as the islands bootstrap runs.
+ * - `"idle"` — hydrate in a `requestIdleCallback`.
+ * - `"visible"` — hydrate when the island scrolls into view
+ *   (`IntersectionObserver`).
+ */
+type IslandStrategy = "load" | "idle" | "visible";
+/**
+ * Props accepted by every island component usage on the server. Intersect
+ * with your own props type: `function Counter(props: CounterProps & IslandProps)`.
+ * `client` is consumed by the framework and never reaches the component.
+ */
+interface IslandProps {
+  client?: IslandStrategy;
+}
+type RouteParams = Record<string, string>;
+type RouteParamInput = string | number | boolean;
+type SearchParamPrimitive = string | number | boolean;
+type SearchParamValue = SearchParamPrimitive | null | undefined | readonly (SearchParamPrimitive | null | undefined)[];
+type SearchParamsInput = string | URLSearchParams | Record<string, SearchParamValue>;
+interface BuildHrefOptions {
+  params?: Record<string, RouteParamInput>;
+  search?: SearchParamsInput;
+  hash?: string;
+}
+interface NavigateOptions {
+  replace?: boolean;
+  /**
+   * Keep the current scroll position after the navigation commits instead of
+   * scrolling to the top (or to the target `#hash` element).
+   */
+  preserveScroll?: boolean;
+  /**
+   * Wrap this navigation's DOM commit in `document.startViewTransition()`
+   * when the browser supports it. Overrides the app-level
+   * `viewTransitions` default for this navigation.
+   */
+  viewTransition?: boolean;
+}
+interface HrefRouteDefinition {
+  id?: string;
+  path: string;
+  segments?: readonly RouteSegment[];
+}
+type RegisteredRouteMap = Register extends {
+  routes: infer TRoutes;
+} ? TRoutes extends Record<string, unknown> ? TRoutes : {} : {};
+type HasRegisteredRoutes = keyof RegisteredRouteMap extends never ? false : true;
+type EmptyRouteParams = Record<never, never>;
+type IsEmptyRouteParams<TParams> = keyof TParams extends never ? true : false;
+type RouteId = HasRegisteredRoutes extends true ? Extract<keyof RegisteredRouteMap, string> : string;
+type RouteParamsFor<TRoute extends RouteId> = HasRegisteredRoutes extends true ? TRoute extends keyof RegisteredRouteMap ? RegisteredRouteMap[TRoute] extends {
+  params: infer TParams;
+} ? TParams extends Record<string, unknown> ? TParams : EmptyRouteParams : EmptyRouteParams : never : Record<string, RouteParamInput>;
+type RouteSearchFor<TRoute extends RouteId> = HasRegisteredRoutes extends true ? TRoute extends keyof RegisteredRouteMap ? RegisteredRouteMap[TRoute] extends {
+  search: infer TSearch;
+} ? TSearch : SearchParamsInput : never : SearchParamsInput;
+type RouteDataFor<TRoute extends RouteId> = HasRegisteredRoutes extends true ? TRoute extends keyof RegisteredRouteMap ? RegisteredRouteMap[TRoute] extends {
+  data: infer TData;
+} ? TData : unknown : never : unknown;
+type TypedHrefOptions<TRoute extends RouteId> = IsEmptyRouteParams<RouteParamsFor<TRoute>> extends true ? {
+  params?: never;
+  search?: RouteSearchFor<TRoute>;
+  hash?: string;
+} : {
+  params: RouteParamsFor<TRoute>;
+  search?: RouteSearchFor<TRoute>;
+  hash?: string;
+};
+type HrefOptions<TRoute extends RouteId = RouteId> = HasRegisteredRoutes extends true ? TRoute extends RouteId ? TypedHrefOptions<TRoute> : never : BuildHrefOptions;
+type HrefArgs<TRoute extends RouteId = RouteId> = HasRegisteredRoutes extends true ? TRoute extends RouteId ? IsEmptyRouteParams<RouteParamsFor<TRoute>> extends true ? [options?: TypedHrefOptions<TRoute>] : [options: TypedHrefOptions<TRoute>] : never : [options?: BuildHrefOptions];
+type RouteTarget<TRoute extends RouteId = RouteId> = HasRegisteredRoutes extends true ? TRoute extends RouteId ? {
+  route: TRoute;
+} & TypedHrefOptions<TRoute> : never : {
+  route: string;
+} & BuildHrefOptions;
+type HrefFn = <TRoute extends RouteId>(route: TRoute, ...args: HrefArgs<TRoute>) => string;
+type RegisteredApiRouteMap = Register extends {
+  apiRoutes: infer TApiRoutes;
+} ? TApiRoutes extends Record<string, unknown> ? TApiRoutes : {} : {};
+type HasRegisteredApiRoutes = keyof RegisteredApiRouteMap extends never ? false : true;
+/**
+ * API route path templates registered by `pracht typegen` (e.g.
+ * `"/api/items/:id"`). Falls back to `string` when no api routes are
+ * registered so `apiFetch()` stays usable without codegen.
+ */
+type ApiPath = HasRegisteredApiRoutes extends true ? Extract<keyof RegisteredApiRouteMap, string> : string;
+type ApiRouteEntryFor<TPath> = TPath extends keyof RegisteredApiRouteMap ? RegisteredApiRouteMap[TPath] : never;
+type ApiMethodMapFor<TPath> = ApiRouteEntryFor<TPath> extends {
+  methods: infer TMethods;
+} ? TMethods : {};
+/** HTTP methods handled by the registered route, including default fallbacks. */
+type ApiMethodsFor<TPath extends ApiPath> = HasRegisteredApiRoutes extends true ? "default" extends keyof ApiMethodMapFor<TPath> ? HttpMethod : Extract<keyof ApiMethodMapFor<TPath>, HttpMethod> extends never ? HttpMethod : Extract<keyof ApiMethodMapFor<TPath>, HttpMethod> : HttpMethod;
+type ApiMethodTypesFor<TPath extends ApiPath, TMethod> = TMethod extends keyof ApiMethodMapFor<TPath> ? ApiMethodMapFor<TPath>[TMethod] : "default" extends keyof ApiMethodMapFor<TPath> ? ApiMethodMapFor<TPath>["default"] : {
+  body: unknown;
+  query: unknown;
+  output: unknown;
+  params: unknown;
+};
+type ApiBodyFor<TPath extends ApiPath, TMethod extends HttpMethod> = TMethod extends "GET" | "HEAD" ? undefined : ApiMethodTypesFor<TPath, TMethod> extends {
+  body: infer TBody;
+} ? TBody : unknown;
+type ApiQueryFor<TPath extends ApiPath, TMethod extends HttpMethod> = ApiMethodTypesFor<TPath, TMethod> extends {
+  query: infer TQuery;
+} ? TQuery : unknown;
+type ApiOutputFor<TPath extends ApiPath, TMethod extends HttpMethod> = TMethod extends "HEAD" ? undefined : ApiMethodTypesFor<TPath, TMethod> extends {
+  output: infer TOutput;
+} ? TOutput : unknown;
+type ApiParamsFor<TPath extends ApiPath> = HasRegisteredApiRoutes extends true ? ApiRouteEntryFor<TPath> extends {
+  params: infer TParams;
+} ? TParams extends Record<string, unknown> ? TParams : EmptyRouteParams : EmptyRouteParams : Record<string, RouteParamInput>;
+type ApiParamsSchemaInputFor<TPath extends ApiPath, TMethod extends HttpMethod> = ApiMethodTypesFor<TPath, TMethod> extends {
+  params: infer TParams;
+} ? TParams : unknown;
+type ApiFetchMethodField<TMethod> = TMethod extends "GET" ? {
+  method?: "GET";
+} : {
+  method: TMethod;
+};
+type ContainsFileValue<TValue> = [Extract<TValue, Blob>] extends [never] ? TValue extends readonly (infer TEntry)[] ? [Extract<TEntry, Blob>] extends [never] ? false : true : false : true;
+type ApiBodyAcceptsFormData<TBody> = TBody extends Record<string, unknown> ? true extends { [TKey in keyof TBody]-?: ContainsFileValue<NonNullable<TBody[TKey]>> }[keyof TBody] ? true : false : false;
+/**
+ * A `File`/`Blob`-bearing body schema targets multipart form submissions.
+ * JSON-encoding such a body would silently drop the file (`File` serializes
+ * to `{}`), so `FormData` is accepted as the wire format for those routes.
+ */
+type ApiFetchBodyInput<TBody> = true extends ApiBodyAcceptsFormData<NonNullable<TBody>> ? TBody | FormData : TBody;
+type ApiFetchBodyField<TBody> = unknown extends TBody ? {
+  body?: unknown;
+} : undefined extends TBody ? {
+  body?: ApiFetchBodyInput<TBody>;
+} : {
+  body: ApiFetchBodyInput<TBody>;
+};
+type QueryWireValue = string | readonly string[];
+/**
+ * Query values cross the wire as URL search params: the server always hands
+ * the query schema a string per key (or a string array for repeated keys). A
+ * schema input with no string representation — `z.number()`, `z.boolean()` —
+ * would type-check here yet fail validation on every request, so those keys
+ * become a compile-time error instead. Inputs that accept strings
+ * (`z.coerce.number()`, `z.enum([...])`, unions with a string arm) pass
+ * through unchanged.
+ */
+type ApiQueryWireCheck<TQuery> = TQuery extends Record<string, unknown> ? { [TKey in keyof TQuery]: unknown extends TQuery[TKey] ? TQuery[TKey] : [Extract<NonNullable<TQuery[TKey]>, QueryWireValue>] extends [never] ? {
+  readonly "Query values arrive as strings; give this key a schema input that accepts them (e.g. z.coerce.number())": never;
+} : TQuery[TKey] } : TQuery;
+type ApiFetchQueryField<TQuery> = unknown extends TQuery ? {
+  query?: SearchParamsInput;
+} : Record<never, never> extends TQuery ? {
+  query?: ApiQueryWireCheck<TQuery>;
+} : {
+  query: ApiQueryWireCheck<TQuery>;
+};
+type ApiParamWireError = {
+  readonly "Route params arrive as strings; give this key a schema input that accepts them (e.g. z.coerce.number())": never;
+};
+/**
+ * Route params are interpolated from convenient primitive inputs, but the
+ * server always hands their string representation to the params schema. Keep
+ * the ergonomic call-site type while rejecting schema keys that cannot accept
+ * that wire value. Opaque schema inputs (`unknown`) remain permissive.
+ */
+type ApiParamsWireCheck<TPathParams, TSchemaInput> = unknown extends TSchemaInput ? TPathParams : TSchemaInput extends Record<string, unknown> ? { [TKey in keyof TPathParams]: TKey extends keyof TSchemaInput ? unknown extends TSchemaInput[TKey] ? TPathParams[TKey] : [Extract<NonNullable<TSchemaInput[TKey]>, string>] extends [never] ? ApiParamWireError : TPathParams[TKey] : TPathParams[TKey] } : { [TKey in keyof TPathParams]: ApiParamWireError };
+type ApiFetchParamsField<TPath extends ApiPath, TMethod extends HttpMethod> = HasRegisteredApiRoutes extends true ? IsEmptyRouteParams<ApiParamsFor<TPath>> extends true ? {
+  params?: never;
+} : {
+  params: ApiParamsWireCheck<ApiParamsFor<TPath>, ApiParamsSchemaInputFor<TPath, TMethod>>;
+} : {
+  params?: Record<string, RouteParamInput>;
+};
+interface ApiFetchBaseOptions {
+  headers?: HeadersInit;
+  signal?: AbortSignal;
+  /** Custom fetch implementation (tests, server-to-server calls). */
+  fetch?: typeof globalThis.fetch;
+  /** Prefix for the request URL, e.g. an absolute origin during SSR. */
+  baseUrl?: string;
+}
+type ApiFetchOptions<TPath extends ApiPath = ApiPath, TMethod extends ApiMethodsFor<TPath> = ApiMethodsFor<TPath>> = TMethod extends ApiMethodsFor<TPath> ? ApiFetchBaseOptions & ApiFetchMethodField<TMethod> & ApiFetchBodyField<ApiBodyFor<TPath, TMethod>> & ApiFetchQueryField<ApiQueryFor<TPath, TMethod>> & ApiFetchParamsField<TPath, TMethod> : never;
+type ApiFetchArgs<TPath extends ApiPath, TMethod extends ApiMethodsFor<TPath>> = Record<never, never> extends ApiFetchOptions<TPath, TMethod> ? [options?: ApiFetchOptions<TPath, TMethod>] : [options: ApiFetchOptions<TPath, TMethod>];
+type DefaultApiMethod<TPath extends ApiPath> = "GET" extends ApiMethodsFor<TPath> ? "GET" : ApiMethodsFor<TPath>;
+/**
+ * A reference to a module file — either a plain string path or a lazy import
+ * function. Using `() => import("./path")` enables IDE click-to-navigate.
+ * The vite plugin transforms import functions back to strings at build time.
+ */
+type ModuleRef = string | (() => Promise<any>);
+interface TimeRevalidatePolicy {
+  kind: "time";
+  seconds: number;
+}
+interface WebhookRevalidatePolicy {
+  kind: "webhook";
+}
+type RouteRevalidatePolicy = TimeRevalidatePolicy | WebhookRevalidatePolicy;
+type RouteRevalidate = RouteRevalidatePolicy | readonly RouteRevalidatePolicy[];
+type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
+type ApiRouteArgs<TContext = RegisteredContext> = Omit<BaseRouteArgs<TContext>, "route"> & {
+  route: ResolvedApiRoute;
+};
+type ApiRouteHandler<TContext = RegisteredContext> = (args: ApiRouteArgs<TContext>) => MaybePromise<Response>;
+interface ApiRouteModule<TContext = any> {
+  default?: ApiRouteHandler<TContext>;
+  GET?: ApiRouteHandler<TContext>;
+  POST?: ApiRouteHandler<TContext>;
+  PUT?: ApiRouteHandler<TContext>;
+  PATCH?: ApiRouteHandler<TContext>;
+  DELETE?: ApiRouteHandler<TContext>;
+  HEAD?: ApiRouteHandler<TContext>;
+  OPTIONS?: ApiRouteHandler<TContext>;
+}
+interface ResolvedApiRoute {
+  path: string;
+  file: string;
+  segments: RouteSegment[];
+}
+interface ApiRouteMatch {
+  route: ResolvedApiRoute;
+  params: RouteParams;
+  pathname: string;
+}
+type PrefetchStrategy = "none" | "hover" | "viewport" | "intent";
+/**
+ * Browser cache duration for route-state loader responses, in seconds.
+ * `false` and `0` disable storage with `Cache-Control: no-store`.
+ */
+type LoaderCache = number | false;
+/**
+ * Per-link prefetch strategy accepted by `<Link prefetch>`. Extends the
+ * route-level strategies with `"render"`, which prefetches as soon as the
+ * link is rendered.
+ */
+type LinkPrefetchStrategy = PrefetchStrategy | "render";
+/**
+ * Browser-native speculation rules. Emitted as `<script type="speculationrules">`
+ * in the SSR/SSG HTML. Complements the JS-based `prefetch` strategies — those
+ * fetch route-state JSON for SPA navigation; this opts the browser into HTML
+ * prefetch or full prerender so a click can swap to an already-rendered document.
+ *
+ * - `prefetch`: browser fetches the page HTML on intent (default eagerness
+ *   `moderate` — ~hover/touchstart). Useful for full-page navigations and
+ *   middle-click / new-tab opens.
+ * - `prerender`: browser fully renders the page (running its JS) in the
+ *   background; click navigates instantly. The SPA click handler skips
+ *   prerender-marked routes so the browser can activate the prerendered
+ *   document instead of intercepting the click. Default eagerness
+ *   `conservative` (touchstart / mousedown).
+ */
+type SpeculationMode = "prefetch" | "prerender";
+type SpeculationEagerness = "immediate" | "eager" | "moderate" | "conservative";
+interface SpeculationConfig {
+  mode: SpeculationMode;
+  eagerness?: SpeculationEagerness;
+}
+type SpeculationOption = SpeculationMode | SpeculationConfig;
+interface RouteMeta {
+  id?: string;
+  shell?: string;
+  render?: RenderMode;
+  hydration?: HydrationMode;
+  /** Declare that middleware negotiates a Markdown representation for this route. */
+  markdown?: boolean;
+  middleware?: string[];
+  revalidate?: RouteRevalidate;
+  loaderCache?: LoaderCache;
+  /**
+   * Stream the HTML document instead of buffering it.
+   *
+   * Only meaningful with `render: "ssr"` and `hydration: "full"` — every other
+   * combination either writes a file or ships no client runtime, and resolves
+   * deferred values before responding. Off by default.
+   */
+  streaming?: boolean;
+  prefetch?: PrefetchStrategy;
+  speculation?: SpeculationOption;
+  hasLoader?: boolean;
+  /** @internal Build-time hint used to preserve loaderless navigation optimization. */
+  hasHead?: boolean;
+  /**
+   * @internal Build-time hint: does the route module export `getStaticPaths()`?
+   *
+   * Only static exports read it. A dynamic route without `getStaticPaths()` is
+   * prerendered for no path at all, so no route-state file exists for any URL
+   * that matches it.
+   */
+  hasStaticPaths?: boolean;
+}
+interface GroupMeta {
+  shell?: string;
+  render?: RenderMode;
+  hydration?: HydrationMode;
+  middleware?: string[];
+  loaderCache?: LoaderCache;
+  /** Stream HTML documents for routes in this group. See `RouteMeta.streaming`. */
+  streaming?: boolean;
+  pathPrefix?: string;
+  speculation?: SpeculationOption;
+}
+interface ApiConfig {
+  middleware?: string[];
+  /**
+   * When `true` (the default), state-changing API requests
+   * (POST/PUT/PATCH/DELETE) are rejected unless the browser signals an
+   * exact same-origin fetch (`Sec-Fetch-Site: same-origin`) or the request
+   * Origin/Referer matches the request URL's origin. `same-site` is not
+   * accepted by default because sibling subdomains can be attacker-controlled.
+   * Set to `false` to opt out if you build your own CSRF protection into middleware.
+   */
+  requireSameOrigin?: boolean;
+}
+interface RouteConfig extends RouteMeta {
+  component: ModuleRef;
+  loader?: ModuleRef;
+}
+/**
+ * App-level not-found page. Rendered with a 404 status when a request matches
+ * no page route, and when a loader/middleware throws a 404 (`notFound()`).
+ *
+ * It is deliberately *not* a route: it never participates in path matching,
+ * so it cannot shadow static assets, API routes, or a later-registered page —
+ * the failure mode of the catch-all (`route("/*", ...)`) pattern it replaces.
+ * It is also excluded from typed routes, prefetching, speculation rules, and
+ * SSG/ISG prerendering.
+ */
+interface NotFoundConfig {
+  component: ModuleRef;
+  /** Separate loader module, mirroring `route({ component, loader })`. */
+  loader?: ModuleRef;
+  shell?: string;
+  middleware?: string[];
+  hydration?: HydrationMode;
+}
+/** `NotFoundConfig` with module refs resolved to file paths. */
+interface NotFoundDefinition {
+  file: string;
+  loaderFile?: string;
+  hasLoader?: boolean;
+  shell?: string;
+  middleware?: string[];
+  hydration?: HydrationMode;
+}
+interface RouteDefinition extends RouteMeta {
+  kind: "route";
+  path: string;
+  file: string;
+  loaderFile?: string;
+}
+interface GroupDefinition {
+  kind: "group";
+  meta: GroupMeta;
+  routes: RouteTreeNode[];
+}
+type RouteTreeNode = RouteDefinition | GroupDefinition;
+type AgentPolicyMode = CapabilityAgentPolicy;
+/** A statically configured agent verification key (public Ed25519 JWK material). */
+interface WebBotAuthStaticKey {
+  /** Base64url raw Ed25519 public key — the JWK `x` member. */
+  x: string;
+  /**
+   * Key id the agent sends as `keyid`. Defaults to the RFC 8037 JWK SHA-256
+   * thumbprint computed from `x`, which is what Web Bot Auth agents send.
+   */
+  kid?: string;
+  /** Label reported as `agentDomain` when the request has no Signature-Agent header. */
+  agent?: string;
+}
+interface WebBotAuthConfig {
+  /**
+   * App-wide default policy for capability HTTP endpoints.
+   * - `"observe"` (default): verify and surface `context.agent`, serve everyone.
+   * - `"require"`: unsigned/unverified requests to capability HTTP endpoints
+   *   get a 401 envelope. Individual capabilities can override via `agentPolicy`.
+   */
+  policy?: AgentPolicyMode;
+  /** Statically trusted keys (tests, air-gapped deploys, pinned agents). */
+  keys?: WebBotAuthStaticKey[];
+  /**
+   * Origins (e.g. `"https://signature-agent.example"`) whose
+   * `/.well-known/http-message-signatures-directory` may be fetched to
+   * resolve unknown key ids. Fetching is allowlist-only: an unlisted
+   * Signature-Agent fails verification instead of triggering a fetch
+   * (fail closed, no SSRF surface).
+   */
+  directories?: string[];
+  /** Allowed clock skew when checking `created`/`expires`, seconds. Default 60. */
+  clockSkewSeconds?: number;
+  /** Maximum accepted signature lifetime (`expires - created`), seconds. Default 86400 (24h, per draft guidance). */
+  maxLifetimeSeconds?: number;
+  /** In-memory TTL for fetched key directories, seconds. Default 300. */
+  directoryCacheTtlSeconds?: number;
+}
+interface CapabilityConfirmationConfig {
+  /** Confirmation token TTL, seconds. Default 120. */
+  ttlSeconds?: number;
+  /**
+   * Best-effort single-use enforcement via an in-memory, per-instance cache.
+   * Stateless HMAC tokens cannot prevent replay across instances or
+   * restarts — see docs/AGENT_TRUST.md for the honest limitations. Ignored
+   * when an approval store is registered: the store enforces single use
+   * durably.
+   */
+  singleUse?: boolean;
+  /**
+   * Who decides that a destructive call may proceed.
+   *
+   * - `"token"` (default) — the caller commits with the confirmation token it
+   *   was handed. With an approval store registered this also becomes
+   *   exactly-once across replicas.
+   * - `"human"` — the commit is refused with `confirmation_pending` until a
+   *   person approves the proposal out of band. Requires an approval store and
+   *   an authenticated principal from Web Bot Auth or
+   *   `setCapabilityApprovalPrincipalResolver()`; without both, destructive
+   *   calls fail closed.
+   */
+  mode?: "token" | "human";
+}
+/** Lifecycle of a destructive-capability approval proposal. */
+type CapabilityApprovalState = "pending" | "approved" | "rejected" | "consumed";
+/**
+ * One pending destructive operation, keyed by what it *is* rather than by the
+ * token that happened to be minted for it: `id` is a secret-keyed digest of the
+ * principal, capability name, canonicalized input, and approval mode. Repeated
+ * prepare calls for the same operation and mode therefore address the same
+ * proposal, so a person approves an action rather than one particular token.
+ */
+interface CapabilityApprovalRecord {
+  /** Secret-keyed from principal + capability + input hash + mode; never client-supplied. */
+  id: string;
+  /** Verified agent and/or application identity, or `"anonymous"` in token mode. */
+  principal: string;
+  capability: string;
+  /** Base64url SHA-256 of the canonicalized validated input. */
+  inputHash: string;
+  /** The validated input, so a reviewer can see what they are approving. */
+  input: unknown;
+  /** Whether this proposal must be approved before it can be consumed. */
+  requiresApproval: boolean;
+  /** Unix seconds. */
+  createdAt: number;
+  /** Unix seconds; the proposal is dead after this even if still stored. */
+  expiresAt: number;
+  state: CapabilityApprovalState;
+  /** Whoever called `decide()`; application-defined (user id, email, ...). */
+  decidedBy: string | null;
+  decidedAt: number | null;
+}
+interface CapabilityApprovalPrincipalArgs<TContext = PrachtRequestContext> {
+  /** Request context after API and capability middleware have run. */
+  context: TContext;
+  request: Request;
+  capability: string;
+  agent: PrachtAgentIdentity | null;
+}
+/**
+ * Resolve the application-authenticated identity bound to a destructive
+ * proposal. Return a stable user/tenant id, never a display name or a value
+ * supplied directly by the caller.
+ */
+type CapabilityApprovalPrincipalResolver<TContext = PrachtRequestContext> = (args: CapabilityApprovalPrincipalArgs<TContext>) => string | null | Promise<string | null>;
+type CapabilityApprovalConsumeFailure = "unknown" | "expired" | "already_used" | "awaiting_approval" | "rejected";
+type CapabilityApprovalConsumeResult = {
+  ok: true;
+  record: CapabilityApprovalRecord;
+} | {
+  ok: false;
+  reason: CapabilityApprovalConsumeFailure;
+};
+/**
+ * Durable storage for destructive-capability approvals, registered with
+ * `setCapabilityApprovalStore()`.
+ *
+ * `create()` and `consume()` both carry hard concurrency requirements:
+ * `create()` MUST atomically insert-if-absent and return the existing live
+ * proposal on conflict; `consume()` MUST be a compare-and-set, not a read
+ * followed by a write. A prepare racing a commit must never resurrect a
+ * consumed proposal, and two replicas committing concurrently must produce
+ * exactly one `ok: true`. A backend without conditional writes (e.g.
+ * Cloudflare KV) cannot implement this; D1, Durable Objects, Postgres, and
+ * Redis can. See docs/AGENT_TRUST.md for reference SQL statements.
+ *
+ * Implementations own their clock and compare against `record.expiresAt`.
+ */
+interface CapabilityApprovalStore {
+  /**
+   * Record a proposal with an atomic insert-if-absent. When a live proposal
+   * with the same `id` already exists it must be returned unchanged, so a
+   * concurrent re-prepare cannot extend its life, reset a decision, or
+   * resurrect it after consumption. Consumed/rejected records remain live
+   * until `expiresAt`; the same operation can be proposed again after expiry.
+   */
+  create(record: CapabilityApprovalRecord): Promise<CapabilityApprovalRecord>;
+  get(id: string): Promise<CapabilityApprovalRecord | null>;
+  /** Unexpired proposals still awaiting a decision, for a review surface. */
+  listPending(): Promise<CapabilityApprovalRecord[]>;
+  /**
+   * Record a human decision. Returns `false` when the proposal is unknown,
+   * expired, or already decided or consumed.
+   */
+  decide(id: string, decision: "approved" | "rejected", by: string): Promise<boolean>;
+  /** Atomically consume an eligible proposal, enforcing its stored approval requirement. */
+  consume(id: string): Promise<CapabilityApprovalConsumeResult>;
+}
+/**
+ * Serve capabilities that set `expose.mcp` over stateless Streamable HTTP at
+ * a single endpoint. Omitting this leaves `expose.mcp` recorded in the graph
+ * but unserved.
+ */
+interface McpProjectionConfig {
+  /** Exact same-origin endpoint pathname. Default `/mcp`. */
+  path?: string;
+  /** Reported by `initialize`. Defaults to `{ name: "pracht", version: "0.0.0" }`. */
+  serverInfo?: {
+    name: string;
+    version: string;
+  };
+  /** Optional free-text guidance returned by `initialize`. */
+  instructions?: string;
+}
+interface PrachtAgentsConfig {
+  /** Verify RFC 9421 / Web Bot Auth agent signatures and surface `context.agent`. */
+  webBotAuth?: WebBotAuthConfig;
+  /** Prepare/commit confirmation flow options for destructive capabilities. */
+  confirmation?: CapabilityConfirmationConfig;
+  /** Serve `expose.mcp` capabilities as MCP tools. See {@link McpProjectionConfig}. */
+  mcp?: McpProjectionConfig;
+}
+/** Structured audit event emitted for every capability dispatch. */
+interface CapabilityAuditEvent {
+  readonly capability: string;
+  readonly effect: CapabilityEffect;
+  /**
+   * How the capability was invoked. `"mcp"` is trusted internal dispatch
+   * state from the remote MCP projection. `"webmcp"` reflects the transport
+   * marker the generated WebMCP shim sends with its dispatches — informational,
+   * not a trust signal (any HTTP client can send the header).
+   */
+  readonly transport: "http" | "server" | "webmcp" | "mcp";
+  /**
+   * Which request a `transport: "server"` dispatch was composed under.
+   * `invokeCapability()` normally runs only the capability's own middleware
+   * chain; MCP-originated composition additionally enforces agent policy and
+   * refuses destructive effects. `via` keeps every allowed or denied nested
+   * call attributable to its originating transport. `null` for top-level
+   * dispatches (`transport` already says how they arrived) and for invocation
+   * outside a served request (test hosts, scripts). Never reports `"webmcp"`:
+   * that marker is client-declared, so it is not trustworthy enough to
+   * attribute a nested effect to.
+   */
+  readonly via: "http" | "mcp" | null;
+  /** `"ok"` or the envelope error code (e.g. `"invalid_input"`, `"confirmation_required"`). */
+  readonly outcome: string;
+  /** HTTP status the envelope maps to (also set for server-side invocation). */
+  readonly status: number;
+  readonly durationMs: number;
+  /** Verified agent identity, `null` when unsigned/unverified or Web Bot Auth is off. */
+  readonly agent: PrachtAgentIdentity | null;
+}
+type CapabilityAuditHook = (event: CapabilityAuditEvent) => void;
+interface PrachtAppConfig {
+  shells?: Record<string, ModuleRef>;
+  middleware?: Record<string, ModuleRef>;
+  /**
+   * Named capabilities defined with `defineCapability()` from
+   * `@pracht/capabilities`, registered like shells and middleware:
+   * `{ "notes.search": () => import("./capabilities/notes-search.ts") }`.
+   * Capability modules are server-only and private by default — a capability
+   * without an `expose` config is only callable via `invokeCapability()`.
+   */
+  capabilities?: Record<string, ModuleRef>;
+  /**
+   * Agent trust configuration: Web Bot Auth verification policy/keys and the
+   * destructive-capability confirmation flow. Serializable data only.
+   */
+  agents?: PrachtAgentsConfig;
+  api?: ApiConfig;
+  routes: RouteTreeNode[];
+  /**
+   * Page rendered (with a 404 status) when no route matches, and when a
+   * loader or middleware throws a 404. See {@link NotFoundConfig}.
+   */
+  notFound?: ModuleRef | NotFoundConfig;
+  /**
+   * Declarative invariants over the resolved route graph (e.g.
+   * `requireMiddleware("/app/**", "auth")`). Enforced deterministically by
+   * `pracht verify`; violations fail verification.
+   */
+  constraints?: RouteConstraint[];
+  /**
+   * Enable the View Transitions API for every client navigation by default.
+   * Individual navigations can still opt out via
+   * `navigate(to, { viewTransition: false })`. Ignored in browsers without
+   * `document.startViewTransition` support.
+   */
+  viewTransitions?: boolean;
+}
+interface PrachtApp {
+  shells: Record<string, string>;
+  middleware: Record<string, string>;
+  capabilities: Record<string, string>;
+  agents?: PrachtAgentsConfig;
+  api: ApiConfig;
+  routes: RouteTreeNode[];
+  notFound?: NotFoundDefinition;
+  constraints?: RouteConstraint[];
+  viewTransitions?: boolean;
+}
+interface StaticRouteSegment {
+  type: "static";
+  value: string;
+}
+interface ParamRouteSegment {
+  type: "param";
+  name: string;
+}
+interface CatchAllRouteSegment {
+  type: "catchall";
+  name: string;
+}
+type RouteSegment = StaticRouteSegment | ParamRouteSegment | CatchAllRouteSegment;
+interface ResolvedRoute extends Omit<RouteMeta, "middleware"> {
+  path: string;
+  file: string;
+  loaderFile?: string;
+  shell?: string;
+  shellFile?: string;
+  middleware: string[];
+  middlewareFiles: string[];
+  segments: RouteSegment[];
+}
+interface ResolvedPrachtApp extends Omit<PrachtApp, "notFound" | "routes"> {
+  routes: ResolvedRoute[];
+  apiRoutes: ResolvedApiRoute[];
+  /**
+   * The not-found page as a route-shaped record so the render pipeline can
+   * treat it like any other route. It is never present in `routes`, so it
+   * never matches a URL.
+   */
+  notFound?: ResolvedRoute;
+  /**
+   * Route definitions `<Link route=…>` and `href()` resolve against, when they
+   * differ from the matchable `routes`. Static exports render `404.html` and
+   * the SPA fallback through an app whose `routes` are emptied so no dynamic
+   * pattern can consume the synthetic request; the shell and not-found page
+   * still build hrefs, so they keep the real table here.
+   */
+  hrefRoutes?: readonly HrefRouteDefinition[];
+}
+interface RouteMatch {
+  route: ResolvedRoute;
+  params: RouteParams;
+  pathname: string;
+}
+interface BaseRouteArgs<TContext = RegisteredContext> {
+  request: Request;
+  params: RouteParams;
+  context: TContext;
+  signal: AbortSignal;
+  url: URL;
+  route: ResolvedRoute;
+  /** Matched route pathname with the configured deployment base removed. */
+  pathname?: string;
+}
+interface LoaderArgs<TContext = RegisteredContext> extends BaseRouteArgs<TContext> {}
+/** The matched page or API route whose middleware chain is running. */
+type MiddlewareRoute = ResolvedRoute | ResolvedApiRoute;
+/**
+ * Middleware wraps both page and API routes. Narrow `route` by checking for
+ * page-only metadata such as `middlewareFiles` before reading those fields.
+ */
+type MiddlewareArgs<TContext = RegisteredContext> = Omit<BaseRouteArgs<TContext>, "route"> & {
+  route: MiddlewareRoute;
+};
+type HeadAttributes = Record<string, string | undefined>;
+interface HeadScriptDescriptor extends HeadAttributes {
+  children?: string;
+}
+interface HeadMetadata {
+  title?: string;
+  lang?: string;
+  meta?: HeadAttributes[];
+  link?: HeadAttributes[];
+  script?: HeadScriptDescriptor[];
+  /**
+   * Fonts created with `defineFont()`. The head renderer expands each entry
+   * into preload links plus one inline `<style>` with the `@font-face`
+   * rules, deduped across shell and route contributions.
+   */
+  fonts?: PrachtFont[];
+  /**
+   * CSP nonce for the generated font `<style>`. Put a request-specific nonce
+   * on a shared shell head when using `style-src 'nonce-…'`.
+   */
+  fontNonce?: string;
+}
+type MaybePromise<T> = T | Promise<T>;
+type LoaderLike = ((args: LoaderArgs<any>) => unknown) | undefined;
+type LoaderData<TLoader extends LoaderLike> = TLoader extends ((...args: any[]) => infer TResult) ? Awaited<TResult> : never;
+/**
+ * Extract loader data from a route module type. `pracht typegen` uses this to
+ * register per-route loader data on `Register["routes"]`. When a separate
+ * loader module is wired via the manifest (`loader: () => import(...)`), pass
+ * it first and the route module second — the loader module wins, matching the
+ * runtime's resolution order. Modules without a `loader` export resolve to
+ * `undefined`, mirroring the data a loaderless route receives.
+ */
+type RouteLoaderData<TModule, TFallbackModule = TModule> = TModule extends {
+  loader: (...args: any[]) => infer TResult;
+} ? Awaited<TResult> : TFallbackModule extends {
+  loader: (...args: any[]) => infer TFallbackResult;
+} ? Awaited<TFallbackResult> : undefined;
+interface HeadArgs<TLoader extends LoaderLike = undefined, TContext = any> extends BaseRouteArgs<TContext> {
+  data: LoaderData<TLoader>;
+}
+interface HeadersArgs<TLoader extends LoaderLike = undefined, TContext = any> extends BaseRouteArgs<TContext> {
+  data: LoaderData<TLoader>;
+}
+interface RouteComponentProps<TLoader extends LoaderLike = undefined> {
+  data: LoaderData<TLoader>;
+  params: RouteParams;
+}
+interface ErrorBoundaryProps {
+  error: Error & {
+    diagnostics?: unknown;
+    status?: number;
+  };
+}
+interface ShellProps {
+  children: ComponentChildren;
+}
+type LoaderFn<TContext = any, TData = unknown> = (args: LoaderArgs<TContext>) => MaybePromise<TData>;
+interface RouteModule<TContext = any, TLoader extends LoaderLike = undefined> {
+  loader?: LoaderFn<TContext>;
+  head?: (args: HeadArgs<TLoader, TContext>) => MaybePromise<HeadMetadata>;
+  headers?: (args: HeadersArgs<TLoader, TContext>) => MaybePromise<HeadersInit>;
+  Component?: FunctionComponent<RouteComponentProps<TLoader>>;
+  default?: FunctionComponent<RouteComponentProps<TLoader>>;
+  ErrorBoundary?: FunctionComponent<ErrorBoundaryProps>;
+  getStaticPaths?: () => MaybePromise<RouteParams[]>;
+  markdown?: string;
+}
+interface ShellModule<TContext = any> {
+  Shell: FunctionComponent<ShellProps>;
+  Loading?: FunctionComponent;
+  ErrorBoundary?: FunctionComponent<ErrorBoundaryProps>;
+  head?: (args: BaseRouteArgs<TContext>) => MaybePromise<HeadMetadata>;
+  headers?: (args: BaseRouteArgs<TContext>) => MaybePromise<HeadersInit>;
+}
+type MiddlewareNext = () => Promise<Response>;
+type MiddlewareFn<TContext = any> = (args: MiddlewareArgs<TContext>, next: MiddlewareNext) => MaybePromise<Response>;
+interface MiddlewareModule<TContext = any> {
+  middleware: MiddlewareFn<TContext>;
+}
+type ModuleImporter<TModule = unknown> = () => Promise<TModule>;
+interface DataModule<TContext = any> {
+  loader?: LoaderFn<TContext>;
+}
+interface ModuleRegistry {
+  routeModules?: Record<string, ModuleImporter<RouteModule>>;
+  shellModules?: Record<string, ModuleImporter<ShellModule>>;
+  middlewareModules?: Record<string, ModuleImporter<MiddlewareModule>>;
+  apiModules?: Record<string, ModuleImporter<ApiRouteModule>>;
+  dataModules?: Record<string, ModuleImporter<DataModule>>;
+  capabilityModules?: Record<string, ModuleImporter<CapabilityModule>>;
+}
+type PrachtCapability<TContext = any> = Capability<any, unknown, TContext>;
+interface CapabilityModule<TContext = any> {
+  default: PrachtCapability<TContext>;
+}
+/**
+ * `pracht typegen` generates capability input/output types from the JSON
+ * Schemas in the app's capability graph and registers them on
+ * `Register["capabilities"]`, mirroring how route typegen registers
+ * `Register["routes"]`. Once registered, `invokeCapability()` (and the
+ * browser's `callCapability()`) infer input and output types from the
+ * capability name — no per-call generics needed.
+ */
+type RegisteredCapabilityMap = Register extends {
+  capabilities: infer TCapabilities;
+} ? TCapabilities extends Record<string, unknown> ? TCapabilities : {} : {};
+/**
+ * Whether the app generated a capability registration. Test for the property,
+ * not for entries: after the last capability is removed, typegen deliberately
+ * emits an empty registration and stale calls must remain compile errors.
+ * Every alias below degrades to `string`/`unknown` only when the property is
+ * absent, so the APIs stay usable before the first `pracht typegen` run.
+ */
+type HasRegisteredCapabilities = "capabilities" extends keyof Register ? true : false;
+type RegisteredCapabilityName = Extract<keyof RegisteredCapabilityMap, string>;
+/**
+ * Every registered capability name, including private ones: direct server
+ * invocation reaches capabilities that are never exposed over the network.
+ * Falls back to `string` before typegen has run.
+ */
+type CapabilityName = HasRegisteredCapabilities extends true ? RegisteredCapabilityName : string;
+type ExposedHttpCapabilityName = { [TName in keyof RegisteredCapabilityMap]: RegisteredCapabilityMap[TName] extends {
+  exposed: {
+    http: true;
+  };
+} ? TName : never }[keyof RegisteredCapabilityMap] & string;
+/**
+ * Whether every generated entry carries the exposure metadata introduced with
+ * the typed browser client. Checking for the field — rather than checking
+ * whether any capability is exposed — distinguishes a legacy declaration from
+ * a current app whose capabilities are all deliberately private.
+ */
+type HasCapabilityExposureMetadata = HasRegisteredCapabilities extends true ? RegisteredCapabilityMap[RegisteredCapabilityName] extends {
+  exposed: {
+    http: boolean;
+  };
+} ? true : false : false;
+/**
+ * Capability names reachable from the browser — those with `expose.http`.
+ * `callCapability()`, the generated `capabilities` client, and
+ * `<Form capability>` use this so a private capability is a compile error
+ * rather than a runtime `unknown_capability` envelope.
+ *
+ * A declaration generated before `exposed` existed falls back to every
+ * registered name so upgrades remain source-compatible. Current declarations
+ * are distinguishable by the presence of exposure metadata on every entry: an
+ * app whose current registration is entirely private therefore resolves to
+ * `never`, not to the legacy fallback.
+ */
+type HttpCapabilityName = HasRegisteredCapabilities extends true ? HasCapabilityExposureMetadata extends true ? ExposedHttpCapabilityName : RegisteredCapabilityName : string;
+/**
+ * The registration entry for a name, or `never` when the name is unregistered
+ * (which includes every name before typegen has run). Each alias below checks
+ * for that case explicitly: indexing an empty map yields `never`, and `never`
+ * satisfies every `extends` test, so an unguarded conditional would silently
+ * resolve to `never` instead of the intended `unknown`.
+ */
+type RegisteredCapabilityEntry<TName extends string> = TName extends keyof RegisteredCapabilityMap ? RegisteredCapabilityMap[TName] : never;
+type CapabilityInputForName<TName extends string> = [RegisteredCapabilityEntry<TName>] extends [never] ? unknown : RegisteredCapabilityEntry<TName> extends {
+  input: infer TInput;
+} ? TInput : unknown;
+/**
+ * Input accepted safely for every possible capability name. The conditional
+ * distributes over `TName`, then contravariant inference intersects the input
+ * types from each member. A union name therefore has to be narrowed unless one
+ * value satisfies every member's schema; accepting the union of inputs would
+ * let an input for capability A reach capability B at runtime.
+ *
+ * A single capability whose schema itself produces a union remains a union —
+ * only the outer capability-name alternatives are intersected.
+ */
+type CapabilityInputFor<TName extends string> = (TName extends unknown ? (input: CapabilityInputForName<TName>) => void : never) extends ((input: infer TInput) => void) ? TInput : unknown;
+/** Input accepted safely at a capability call boundary. */
+type CapabilityCallInputFor<TName extends string> = CapabilityInputFor<TName>;
+type CapabilityOutputFor<TName extends string> = [RegisteredCapabilityEntry<TName>] extends [never] ? unknown : RegisteredCapabilityEntry<TName> extends {
+  output: infer TOutput;
+} ? TOutput : unknown;
+/** Declared effect class, or the full union when typegen has not run. */
+type CapabilityEffectFor<TName extends string> = [RegisteredCapabilityEntry<TName>] extends [never] ? CapabilityEffect : RegisteredCapabilityEntry<TName> extends {
+  effect: infer TEffect;
+} ? TEffect : CapabilityEffect;
+/**
+ * The effect a registration actually states, or `never` when it states none.
+ *
+ * The confirmation gate has to tell apart two cases `CapabilityEffectFor`
+ * collapses into one. A `pracht-capabilities.d.ts` generated before `effect`
+ * was emitted declares nothing, and must keep behaving as it did — demanding a
+ * token on every call would break every upgrading app. A registration that
+ * declares the *full union* does so because the build could not read a broken
+ * capability's effect, and that one must fail closed.
+ */
+type DeclaredCapabilityEffect<TName extends string> = RegisteredCapabilityEntry<TName> extends {
+  effect: infer TEffect;
+} ? TEffect : never;
+/**
+ * Http-exposed names that cannot be `destructive`, so their call takes its
+ * options optionally. Splitting the name space this way is what keeps the
+ * confirmation gate from swallowing every other diagnostic: a signature whose
+ * *arity* depends on the name reports every name mistake as an argument-count
+ * error, because TypeScript checks arity before it checks the constraint. With
+ * the two effect classes in separate signatures, an unresolvable name always
+ * has one signature it satisfies on arity, and that signature is the one that
+ * gets to say what is actually wrong with the name.
+ *
+ * A legacy declaration that records no `effect` lands here for every name, so
+ * it keeps its pre-gate behaviour.
+ */
+type NonDestructiveCapabilityName = HttpCapabilityName extends infer TName ? TName extends string ? [Extract<DeclaredCapabilityEffect<TName>, "destructive">] extends [never] ? TName : never : never : never;
+/**
+ * Argument list for a browser capability call — `callCapability()` and the
+ * generated `capabilities` client. A capability whose input schema requires
+ * nothing is callable with no argument at all; every other capability must
+ * pass one. When the name is a union, omission is allowed only if every member
+ * accepts empty input. `TOptions` stays generic so the virtual module can
+ * supply its own option type without `@pracht/core` importing it.
+ *
+ * Server-side `invokeCapability()` does not use this: its request context is
+ * always required, so it takes a plain `(name, input, ctx)` signature.
+ */
+type CapabilityInputRequirement<TName extends string> = TName extends string ? {} extends CapabilityInputFor<TName> ? "optional" : "required" : never;
+type CapabilityInputArgs<TName extends string, TOptions> = {} extends TOptions ? "required" extends CapabilityInputRequirement<TName> ? [input: CapabilityInputFor<TName>, options?: TOptions] : {} extends CapabilityInputFor<TName> ? [input?: CapabilityInputFor<TName>, options?: TOptions] : [input: CapabilityInputFor<TName>, options?: TOptions] : [input: CapabilityInputFor<TName>, options: TOptions];
+/**
+ * Browser call options, narrowed per capability: a `destructive` capability is
+ * gated by the server-verified prepare/commit flow. Mark the first call with
+ * `{ prepare: true }`; committing instead requires the confirmation token from
+ * that call's `confirmation_required` envelope. See AGENT_TRUST.md.
+ *
+ * `prepare` is not sent over the wire. The browser dispatcher uses it only to
+ * strip any confirmation token inherited through caller-supplied headers, so
+ * a prepare call cannot accidentally commit. Refusing to run the resulting
+ * unconfirmed call remains the server's job, and it fails closed.
+ *
+ * The gate closes whenever `destructive` is *possible*, not only when it is
+ * certain: a name typed as a union (`"notes.search" | "notes.purge"`) and a
+ * capability whose effect could not be read at build time both demand an
+ * explicit prepare or commit option. Erring toward requiring a flow marker
+ * costs a caller one argument; erring the other way silently drops the only
+ * compile-time half of the confirmation flow.
+ */
+type CapabilityCallOptionsFor<TName extends string, TOptions extends {
+  confirm?: string;
+  prepare?: true;
+}> = [Extract<DeclaredCapabilityEffect<TName>, "destructive">] extends [never] ? TOptions : (Omit<TOptions, "confirm"> & {
+  confirm?: never;
+  prepare: true;
+}) | (TOptions & {
+  confirm: string;
+  prepare?: never;
+});
+/** Browser options shared by `callCapability()` and the nested client. */
+interface CapabilityBrowserCallOptions {
+  headers?: HeadersInit;
+  signal?: AbortSignal;
+  /** Confirmation token for committing a prepared destructive capability. */
+  confirm?: string;
+  /** Begin a destructive call without allowing it to commit. */
+  prepare?: true;
+  /** Skip automatic route-data revalidation after a successful mutation. */
+  revalidate?: boolean;
+}
+/** One generated nested-client method, including its effect-specific options. */
+type CapabilityClientMethod<TName extends string> = (...args: CapabilityInputArgs<TName, CapabilityCallOptionsFor<TName, CapabilityBrowserCallOptions>>) => Promise<CapabilityEnvelope<CapabilityOutputFor<TName>>>;
+declare class PrachtHttpError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string);
+}
+/**
+ * The 404 a loader or middleware throws when the thing it was asked for does
+ * not exist:
+ *
+ * ```ts
+ * const post = await getPost(params.slug);
+ * if (!post) throw notFound();
+ * ```
+ *
+ * Returns the error instead of throwing it so the throw stays visible to
+ * readers and to TypeScript's control-flow analysis (same shape as
+ * `redirect()`). The response renders the app's `notFound` page when one is
+ * configured and the route exports no `ErrorBoundary`.
+ */
+declare function notFound(message?: string): PrachtHttpError;
+//#endregion
+export { AgentPolicyMode, ApiBodyFor, ApiConfig, ApiFetchArgs, ApiFetchBaseOptions, ApiFetchOptions, ApiMethodsFor, ApiOutputFor, ApiParamsFor, ApiPath, ApiQueryFor, ApiRouteArgs, ApiRouteHandler, ApiRouteMatch, ApiRouteModule, BaseRouteArgs, BuildHrefOptions, CapabilityApprovalConsumeFailure, CapabilityApprovalConsumeResult, CapabilityApprovalPrincipalArgs, CapabilityApprovalPrincipalResolver, CapabilityApprovalRecord, CapabilityApprovalState, CapabilityApprovalStore, CapabilityAuditEvent, CapabilityAuditHook, CapabilityBrowserCallOptions, CapabilityCallInputFor, CapabilityCallOptionsFor, CapabilityClientMethod, CapabilityConfirmationConfig, type CapabilityContext, type CapabilityEffect$1 as CapabilityEffect, CapabilityEffectFor, type CapabilityEnvelope$1 as CapabilityEnvelope, type CapabilityErrorCode, type CapabilityErrorPayload$1 as CapabilityErrorPayload, type CapabilityExposure, type CapabilityHttpExposure, CapabilityInputArgs, CapabilityInputFor, type CapabilityIssue, CapabilityModule, CapabilityName, CapabilityOutputFor, type CapabilityRunArgs, type CapabilityValidationResult, DataModule, DefaultApiMethod, ErrorBoundaryProps, GroupDefinition, GroupMeta, HasRegisteredCapabilities, HeadArgs, HeadAttributes, HeadMetadata, HeadScriptDescriptor, HeadersArgs, HrefArgs, HrefFn, HrefOptions, HrefRouteDefinition, HttpCapabilityName, HttpMethod, HydrationMode, IslandProps, IslandStrategy, LinkPrefetchStrategy, LoaderArgs, LoaderCache, LoaderData, LoaderFn, LoaderLike, MaybePromise, McpProjectionConfig, MiddlewareArgs, MiddlewareFn, MiddlewareModule, MiddlewareNext, MiddlewareRoute, ModuleImporter, ModuleRef, ModuleRegistry, NavigateOptions, NonDestructiveCapabilityName, NotFoundConfig, NotFoundDefinition, type PrachtAgentIdentity$1 as PrachtAgentIdentity, PrachtAgentsConfig, PrachtApp, PrachtAppConfig, PrachtCapability, PrachtContextExtensions, PrachtHttpError, PrachtRequestContext, PrefetchStrategy, Register, RegisteredCapabilityName, RegisteredContext, RenderMode, ResolvedApiRoute, ResolvedPrachtApp, ResolvedRoute, RouteComponentProps, RouteConfig, RouteDataFor, RouteDefinition, RouteId, RouteLoaderData, RouteMatch, RouteMeta, RouteModule, RouteParamInput, RouteParams, RouteParamsFor, RouteRevalidate, RouteRevalidatePolicy, RouteSearchFor, RouteSegment, RouteTarget, RouteTreeNode, SearchParamPrimitive, SearchParamValue, SearchParamsInput, ShellModule, ShellProps, SpeculationConfig, SpeculationEagerness, SpeculationMode, SpeculationOption, TimeRevalidatePolicy, WebBotAuthConfig, WebBotAuthStaticKey, WebhookRevalidatePolicy, notFound };

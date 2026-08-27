@@ -1,0 +1,181 @@
+import { serverEnv } from "./env-server.mjs";
+import { CONFIRMATION_HEADER as CONFIRMATION_HEADER$1, CONFIRMATION_SECRET_ENV } from "@pracht/capabilities";
+//#region src/runtime-confirmation.ts
+/**
+* Server-verified prepare/commit confirmation for destructive capabilities.
+*
+* A destructive capability exposed over HTTP never runs on the first call.
+* The first (prepare) call returns a `confirmation_required` envelope with a
+* short-lived token: an HMAC-SHA256 (WebCrypto) over the caller's principal,
+* the capability name, a hash of the canonicalized (stable-JSON) validated
+* input, and an expiry. The second (commit) call presents the token in the
+* `x-pracht-confirm` header with byte-identical canonical input; anything
+* else — tampering, expiry, different input, different principal — fails
+* closed with 403.
+*
+* Honest limitation: a stateless HMAC cannot prevent replay *within* the TTL.
+* True single-use requires shared storage; the optional in-memory cache below
+* is best effort and per-instance only (documented in docs/AGENT_TRUST.md).
+* Register a `CapabilityApprovalStore` (see runtime-approval.ts) for durable
+* exactly-once commits and optional human approval.
+*
+* The secret comes from `PRACHT_CONFIRMATION_SECRET` or
+* `setCapabilityConfirmationSecret()` — never from the app manifest, which is
+* bundled into the client.
+*/
+const STATELESS_TOKEN_VERSION = "v1";
+const DURABLE_TOKEN_VERSION = "v2";
+const encoder = new TextEncoder();
+let programmaticSecret = null;
+/**
+* Configure the confirmation secret at runtime — for platforms where
+* `process.env` is unavailable (e.g. Cloudflare Workers without
+* `nodejs_compat`). Takes precedence over the environment variable.
+*/
+function setCapabilityConfirmationSecret(secret) {
+	programmaticSecret = secret;
+}
+function resolveConfirmationSecret() {
+	if (programmaticSecret) return programmaticSecret;
+	try {
+		const secret = serverEnv[CONFIRMATION_SECRET_ENV];
+		return typeof secret === "string" && secret !== "" ? secret : null;
+	} catch {
+		return null;
+	}
+}
+/**
+* Deterministic JSON with lexicographically sorted object keys, so the same
+* logical input always canonicalizes to the same bytes regardless of the
+* caller's property order. Input has already passed JSON.parse + schema
+* validation, so only JSON-representable values reach this.
+*/
+function canonicalJson(value) {
+	if (value === null || typeof value !== "object") return JSON.stringify(value);
+	if (Array.isArray(value)) return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+	return `{${Object.entries(value).filter(([, entryValue]) => entryValue !== void 0).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, entryValue]) => `${JSON.stringify(key)}:${canonicalJson(entryValue)}`).join(",")}}`;
+}
+async function createConfirmationToken(binding) {
+	const now = binding.now ?? Math.floor(Date.now() / 1e3);
+	const version = confirmationTokenVersion(binding);
+	const claims = {
+		p: binding.principal,
+		c: binding.capability,
+		i: await sha256Base64Url(binding.canonicalInput),
+		exp: now + binding.ttlSeconds,
+		...binding.approvalMode ? { m: binding.approvalMode } : {}
+	};
+	const payload = base64UrlEncode(encoder.encode(JSON.stringify(claims)));
+	return {
+		token: `${version}.${payload}.${await hmacSha256Base64Url(binding.secret, `${version}.${payload}`)}`,
+		expiresAt: claims.exp
+	};
+}
+/**
+* Verify a presented confirmation token against the current call. The
+* signature is checked first so nothing later in the pipeline trusts
+* attacker-controlled claims.
+*/
+async function verifyConfirmationToken(token, binding) {
+	const parts = token.split(".");
+	const version = confirmationTokenVersion(binding);
+	if (parts.length !== 3 || parts[0] !== version) return {
+		ok: false,
+		reason: "malformed"
+	};
+	const [, payload, signature] = parts;
+	if (!timingSafeEqual(signature, await hmacSha256Base64Url(binding.secret, `${version}.${payload}`))) return {
+		ok: false,
+		reason: "bad_signature"
+	};
+	let claims;
+	try {
+		claims = JSON.parse(new TextDecoder().decode(base64UrlDecode(payload)));
+	} catch {
+		return {
+			ok: false,
+			reason: "malformed"
+		};
+	}
+	if (typeof claims.exp !== "number" || typeof claims.i !== "string") return {
+		ok: false,
+		reason: "malformed"
+	};
+	const now = binding.now ?? Math.floor(Date.now() / 1e3);
+	if (claims.exp < now) return {
+		ok: false,
+		reason: "expired"
+	};
+	if (claims.p !== binding.principal) return {
+		ok: false,
+		reason: "principal_mismatch"
+	};
+	if (claims.c !== binding.capability) return {
+		ok: false,
+		reason: "capability_mismatch"
+	};
+	if (claims.m !== binding.approvalMode) return {
+		ok: false,
+		reason: "approval_mode_mismatch"
+	};
+	if (claims.i !== await sha256Base64Url(binding.canonicalInput)) return {
+		ok: false,
+		reason: "input_mismatch"
+	};
+	return {
+		ok: true,
+		signature,
+		expiresAt: claims.exp
+	};
+}
+function confirmationTokenVersion(binding) {
+	return binding.approvalMode ? DURABLE_TOKEN_VERSION : STATELESS_TOKEN_VERSION;
+}
+const usedTokens = /* @__PURE__ */ new Map();
+/**
+* Mark a token as used. Returns false when it was already consumed on this
+* instance. Expired entries are swept opportunistically so the map cannot
+* grow past the confirmation TTL's working set.
+*/
+function consumeConfirmationToken(signature, expiresAt) {
+	const now = Math.floor(Date.now() / 1e3);
+	if (usedTokens.size > 0) {
+		for (const [used, expiry] of usedTokens) if (expiry < now) usedTokens.delete(used);
+	}
+	if (usedTokens.has(signature)) return false;
+	usedTokens.set(signature, expiresAt);
+	return true;
+}
+async function hmacSha256Base64Url(secret, message) {
+	const key = await crypto.subtle.importKey("raw", encoder.encode(secret), {
+		name: "HMAC",
+		hash: "SHA-256"
+	}, false, ["sign"]);
+	const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(message));
+	return base64UrlEncode(new Uint8Array(signature));
+}
+async function sha256Base64Url(value) {
+	const digest = await crypto.subtle.digest("SHA-256", encoder.encode(value));
+	return base64UrlEncode(new Uint8Array(digest));
+}
+/** Constant-time comparison of two base64url strings. */
+function timingSafeEqual(a, b) {
+	if (a.length !== b.length) return false;
+	let mismatch = 0;
+	for (let index = 0; index < a.length; index += 1) mismatch |= a.charCodeAt(index) ^ b.charCodeAt(index);
+	return mismatch === 0;
+}
+function base64UrlEncode(bytes) {
+	let binary = "";
+	for (const byte of bytes) binary += String.fromCharCode(byte);
+	return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function base64UrlDecode(value) {
+	const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+	const binary = atob(normalized);
+	const bytes = new Uint8Array(binary.length);
+	for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+	return bytes;
+}
+//#endregion
+export { CONFIRMATION_HEADER$1 as CONFIRMATION_HEADER, CONFIRMATION_SECRET_ENV, canonicalJson, consumeConfirmationToken, createConfirmationToken, hmacSha256Base64Url, resolveConfirmationSecret, setCapabilityConfirmationSecret, sha256Base64Url, verifyConfirmationToken };
