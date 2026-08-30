@@ -11,7 +11,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.3.0",
     "preact": "^11.0.0-rc.1",
-    "preact-render-to-string": "https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/b59f2b97/preact-render-to-string",
+    "preact-render-to-string": "https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/eac08f63/preact-render-to-string",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vercel": "^59.5.0",
@@ -22,7 +22,7 @@
   "scripts": {
     "sync:pracht-pr": "node scripts/sync-pracht-streaming-pr.mjs",
     "build": "pracht build",
-    "dev": "pracht dev",
+    "dev": "pracht dev --port 3004",
     "typecheck": "tsc --noEmit",
     "deploy": "pracht build && vercel deploy --prebuilt"
   },

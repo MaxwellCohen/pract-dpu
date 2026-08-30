@@ -16,6 +16,8 @@ npm install
 npm run dev
 ```
 
+Open [http://localhost:3004](http://localhost:3004).
+
 ## Verify streaming
 
 1. DevTools → Network → the document → **Response** (not `view-source:`)
