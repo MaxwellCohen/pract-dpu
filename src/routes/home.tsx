@@ -21,6 +21,11 @@ const examples = [
     title: "Out-of-order reveal",
     body: "Fast panel finishes after a slow one starts — HTML can stream completed sections as they ready.",
   },
+  {
+    route: "edge-cases",
+    title: "Edge cases",
+    body: "Popcorning plus HTML, SVG, MathML, and streamed styles — live stream beside the expected result.",
+  },
 ] as const;
 
 export function head() {

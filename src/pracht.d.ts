@@ -41,6 +41,12 @@ declare module "@pracht/core" {
         search: SearchParamsInput;
         data: RouteLoaderData<typeof import("./routes/grid")>;
       };
+      "edge-cases": {
+        path: "/edge-cases";
+        params: Record<never, never>;
+        search: SearchParamsInput;
+        data: RouteLoaderData<typeof import("./routes/edge-cases")>;
+      };
     };
     apiRoutes: {
       "/api/health": {

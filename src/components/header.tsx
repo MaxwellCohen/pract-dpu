@@ -6,6 +6,7 @@ const links = [
   { route: "parallel", label: "Parallel" },
   { route: "nested", label: "Nested" },
   { route: "out-of-order", label: "Out of order" },
+  { route: "edge-cases", label: "Edge cases" },
 ] as const;
 
 export function Header() {

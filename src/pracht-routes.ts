@@ -27,6 +27,10 @@ export const routes = [
     id: "grid",
     path: "/grid",
   },
+  {
+    id: "edge-cases",
+    path: "/edge-cases",
+  },
 ] as const satisfies readonly HrefRouteDefinition[];
 
 export const href = createHref(routes);
