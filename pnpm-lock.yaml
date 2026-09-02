@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  preact-render-to-string: link:/Users/maxcohen/code/preactjs/preact-render-to-string
+  preact-render-to-string: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/da72a46b/preact-render-to-string
 
 importers:
 
@@ -13,20 +13,20 @@ importers:
     dependencies:
       '@pracht/adapter-vercel':
         specifier: file:vendor/pracht-streaming-pr/adapter-vercel
-        version: file:vendor/pracht-streaming-pr/adapter-vercel(preact-render-to-string@..+preactjs+preact-render-to-string)(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))
+        version: file:vendor/pracht-streaming-pr/adapter-vercel(preact-render-to-string@6.7.0)(preact@11.0.0-rc.1)
       '@pracht/capabilities':
         specifier: file:vendor/pracht-streaming-pr/capabilities
         version: file:vendor/pracht-streaming-pr/capabilities
       '@pracht/core':
         specifier: file:vendor/pracht-streaming-pr/framework
-        version: file:vendor/pracht-streaming-pr/framework(preact-render-to-string@..+preactjs+preact-render-to-string)(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))
+        version: file:vendor/pracht-streaming-pr/framework(preact-render-to-string@6.7.0)(preact@11.0.0-rc.1)
     devDependencies:
       '@pracht/cli':
         specifier: file:vendor/pracht-streaming-pr/cli
-        version: file:vendor/pracht-streaming-pr/cli(preact-render-to-string@..+preactjs+preact-render-to-string)(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))
+        version: file:vendor/pracht-streaming-pr/cli(preact-render-to-string@6.7.0)(preact@11.0.0-rc.1)
       '@pracht/vite-plugin':
         specifier: file:vendor/pracht-streaming-pr/vite-plugin
-        version: file:vendor/pracht-streaming-pr/vite-plugin(@babel/core@7.29.7)(preact-render-to-string@..+preactjs+preact-render-to-string)(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))
+        version: file:vendor/pracht-streaming-pr/vite-plugin(@babel/core@7.29.7)(preact-render-to-string@6.7.0)(preact@11.0.0-rc.1)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))
       '@tailwindcss/vite':
         specifier: ^4.3.3
         version: 4.3.3(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))
@@ -35,10 +35,10 @@ importers:
         version: 26.4.0
       preact:
         specifier: ^11.0.0-rc.1
-        version: 11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string)
+        version: 11.0.0-rc.1(preact-render-to-string@6.7.0)
       preact-render-to-string:
-        specifier: link:/Users/maxcohen/code/preactjs/preact-render-to-string
-        version: link:../../preactjs/preact-render-to-string
+        specifier: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/da72a46b/preact-render-to-string
+        version: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/da72a46b/preact-render-to-string(preact@11.0.0-rc.1)
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3
@@ -2464,6 +2464,12 @@ packages:
     resolution: {integrity: sha512-u82N74LFzG8ca+dD8puPnplTXoGH4fTPpVGuIbt36G3qvNlkvfD0lEAZSxaly3KX8TS/L1A1gsCEmvKmBcVbkQ==}
     engines: {node: ^10 || ^12 || >=14}
 
+  preact-render-to-string@https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/da72a46b/preact-render-to-string:
+    resolution: {tarball: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/da72a46b/preact-render-to-string}
+    version: 6.7.0
+    peerDependencies:
+      preact: '>=10 || >= 11.0.0-0'
+
   preact@11.0.0-rc.1:
     resolution: {integrity: sha512-WwZRT+5QYP6A+sUtnLz0fpdi7t/32AtOuDeVo0Z14WC9qCFH8eMo0WQMDJym4k+TNr2DXefEbaWOTMqLIVPwZQ==}
     peerDependencies:
@@ -3458,27 +3464,27 @@ snapshots:
   '@oxc-transform/binding-win32-x64-msvc@0.111.0':
     optional: true
 
-  '@pracht/adapter-node@file:vendor/pracht-streaming-pr/adapter-node(preact-render-to-string@..+preactjs+preact-render-to-string)(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))':
+  '@pracht/adapter-node@file:vendor/pracht-streaming-pr/adapter-node(preact-render-to-string@6.7.0)(preact@11.0.0-rc.1)':
     dependencies:
-      '@pracht/core': file:vendor/pracht-streaming-pr/framework(preact-render-to-string@..+preactjs+preact-render-to-string)(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))
+      '@pracht/core': file:vendor/pracht-streaming-pr/framework(preact-render-to-string@6.7.0)(preact@11.0.0-rc.1)
     transitivePeerDependencies:
       - preact
       - preact-render-to-string
 
-  '@pracht/adapter-vercel@file:vendor/pracht-streaming-pr/adapter-vercel(preact-render-to-string@..+preactjs+preact-render-to-string)(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))':
+  '@pracht/adapter-vercel@file:vendor/pracht-streaming-pr/adapter-vercel(preact-render-to-string@6.7.0)(preact@11.0.0-rc.1)':
     dependencies:
-      '@pracht/core': file:vendor/pracht-streaming-pr/framework(preact-render-to-string@..+preactjs+preact-render-to-string)(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))
+      '@pracht/core': file:vendor/pracht-streaming-pr/framework(preact-render-to-string@6.7.0)(preact@11.0.0-rc.1)
     transitivePeerDependencies:
       - preact
       - preact-render-to-string
 
   '@pracht/capabilities@file:vendor/pracht-streaming-pr/capabilities': {}
 
-  '@pracht/cli@file:vendor/pracht-streaming-pr/cli(preact-render-to-string@..+preactjs+preact-render-to-string)(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))':
+  '@pracht/cli@file:vendor/pracht-streaming-pr/cli(preact-render-to-string@6.7.0)(preact@11.0.0-rc.1)':
     dependencies:
       '@modelcontextprotocol/sdk': 1.30.0(zod@4.4.3)
       '@pracht/capabilities': file:vendor/pracht-streaming-pr/capabilities
-      '@pracht/core': file:vendor/pracht-streaming-pr/framework(preact-render-to-string@..+preactjs+preact-render-to-string)(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))
+      '@pracht/core': file:vendor/pracht-streaming-pr/framework(preact-render-to-string@6.7.0)(preact@11.0.0-rc.1)
       citty: 0.1.6
       zod: 4.4.3
     transitivePeerDependencies:
@@ -3487,31 +3493,31 @@ snapshots:
       - preact-render-to-string
       - supports-color
 
-  '@pracht/core@file:vendor/pracht-streaming-pr/framework(preact-render-to-string@..+preactjs+preact-render-to-string)(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))':
+  '@pracht/core@file:vendor/pracht-streaming-pr/framework(preact-render-to-string@6.7.0)(preact@11.0.0-rc.1)':
     dependencies:
       '@pracht/capabilities': file:vendor/pracht-streaming-pr/capabilities
       '@standard-schema/spec': 1.1.0
-      preact: 11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string)
-      preact-render-to-string: link:../../preactjs/preact-render-to-string
+      preact: 11.0.0-rc.1(preact-render-to-string@6.7.0)
+      preact-render-to-string: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/da72a46b/preact-render-to-string(preact@11.0.0-rc.1)
 
-  '@pracht/preact-ssr-precompile@file:vendor/pracht-streaming-pr/preact-ssr-precompile(preact-render-to-string@..+preactjs+preact-render-to-string)(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))':
+  '@pracht/preact-ssr-precompile@file:vendor/pracht-streaming-pr/preact-ssr-precompile(preact-render-to-string@6.7.0)(preact@11.0.0-rc.1)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))':
     dependencies:
-      preact: 11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string)
-      preact-render-to-string: link:../../preactjs/preact-render-to-string
+      preact: 11.0.0-rc.1(preact-render-to-string@6.7.0)
+      preact-render-to-string: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/da72a46b/preact-render-to-string(preact@11.0.0-rc.1)
       rolldown: 1.2.6
       rolldown-string: 0.3.1(rolldown@1.2.6)
     optionalDependencies:
       vite: 8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0)
 
-  '@pracht/vite-plugin@file:vendor/pracht-streaming-pr/vite-plugin(@babel/core@7.29.7)(preact-render-to-string@..+preactjs+preact-render-to-string)(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))':
+  '@pracht/vite-plugin@file:vendor/pracht-streaming-pr/vite-plugin(@babel/core@7.29.7)(preact-render-to-string@6.7.0)(preact@11.0.0-rc.1)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))':
     dependencies:
       '@babel/parser': 7.29.8
-      '@pracht/adapter-node': file:vendor/pracht-streaming-pr/adapter-node(preact-render-to-string@..+preactjs+preact-render-to-string)(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))
+      '@pracht/adapter-node': file:vendor/pracht-streaming-pr/adapter-node(preact-render-to-string@6.7.0)(preact@11.0.0-rc.1)
       '@pracht/capabilities': file:vendor/pracht-streaming-pr/capabilities
-      '@pracht/core': file:vendor/pracht-streaming-pr/framework(preact-render-to-string@..+preactjs+preact-render-to-string)(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))
-      '@pracht/preact-ssr-precompile': file:vendor/pracht-streaming-pr/preact-ssr-precompile(preact-render-to-string@..+preactjs+preact-render-to-string)(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))
-      '@preact/preset-vite': 2.10.6(@babel/core@7.29.7)(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))
-      '@prefresh/vite': 2.4.12(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))
+      '@pracht/core': file:vendor/pracht-streaming-pr/framework(preact-render-to-string@6.7.0)(preact@11.0.0-rc.1)
+      '@pracht/preact-ssr-precompile': file:vendor/pracht-streaming-pr/preact-ssr-precompile(preact-render-to-string@6.7.0)(preact@11.0.0-rc.1)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))
+      '@preact/preset-vite': 2.10.6(@babel/core@7.29.7)(preact@11.0.0-rc.1)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))
+      '@prefresh/vite': 2.4.12(preact@11.0.0-rc.1)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))
       es-module-lexer: 1.7.0
       vite: 8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0)
     transitivePeerDependencies:
@@ -3521,12 +3527,12 @@ snapshots:
       - rollup
       - supports-color
 
-  '@preact/preset-vite@2.10.6(@babel/core@7.29.7)(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))':
+  '@preact/preset-vite@2.10.6(@babel/core@7.29.7)(preact@11.0.0-rc.1)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))':
     dependencies:
       '@babel/core': 7.29.7
       '@babel/plugin-transform-react-jsx': 7.29.7(@babel/core@7.29.7)
       '@babel/plugin-transform-react-jsx-development': 7.29.7(@babel/core@7.29.7)
-      '@prefresh/vite': 2.4.12(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))
+      '@prefresh/vite': 2.4.12(preact@11.0.0-rc.1)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))
       '@rollup/pluginutils': 5.4.0
       babel-plugin-transform-hook-names: 1.0.2(@babel/core@7.29.7)
       debug: 4.4.3
@@ -3542,20 +3548,20 @@ snapshots:
 
   '@prefresh/babel-plugin@0.5.3': {}
 
-  '@prefresh/core@1.5.10(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))':
+  '@prefresh/core@1.5.10(preact@11.0.0-rc.1)':
     dependencies:
-      preact: 11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string)
+      preact: 11.0.0-rc.1(preact-render-to-string@6.7.0)
 
   '@prefresh/utils@1.2.1': {}
 
-  '@prefresh/vite@2.4.12(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))':
+  '@prefresh/vite@2.4.12(preact@11.0.0-rc.1)(vite@8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0))':
     dependencies:
       '@babel/core': 7.29.7
       '@prefresh/babel-plugin': 0.5.3
-      '@prefresh/core': 1.5.10(preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string))
+      '@prefresh/core': 1.5.10(preact@11.0.0-rc.1)
       '@prefresh/utils': 1.2.1
       '@rollup/pluginutils': 4.2.1
-      preact: 11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string)
+      preact: 11.0.0-rc.1(preact-render-to-string@6.7.0)
       vite: 8.2.2(@types/node@26.4.0)(esbuild@0.27.0)(jiti@2.7.0)(tsx@4.21.0)
     transitivePeerDependencies:
       - supports-color
@@ -5172,9 +5178,13 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  preact@11.0.0-rc.1(preact-render-to-string@..+preactjs+preact-render-to-string):
+  preact-render-to-string@https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/da72a46b/preact-render-to-string(preact@11.0.0-rc.1):
+    dependencies:
+      preact: 11.0.0-rc.1(preact-render-to-string@6.7.0)
+
+  preact@11.0.0-rc.1(preact-render-to-string@6.7.0):
     optionalDependencies:
-      preact-render-to-string: link:../../preactjs/preact-render-to-string
+      preact-render-to-string: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/da72a46b/preact-render-to-string(preact@11.0.0-rc.1)
 
   pretty-ms@7.0.1:
     dependencies:

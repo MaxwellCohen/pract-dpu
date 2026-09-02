@@ -17,13 +17,18 @@
     "vite": "^8.0.0"
   },
   "overrides": {
-    "preact-render-to-string": "file:/Users/maxcohen/code/preactjs/preact-render-to-string"
+    "preact-render-to-string": "https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/da72a46b/preact-render-to-string"
   },
   "pnpm": {
     "overrides": {
-      "preact-render-to-string": "link:/Users/maxcohen/code/preactjs/preact-render-to-string"
-    }
+      "preact-render-to-string": "https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/da72a46b/preact-render-to-string"
+    },
+    "onlyBuiltDependencies": [
+      "@tailwindcss/oxide",
+      "esbuild"
+    ]
   },
+  "packageManager": "pnpm@10.33.0",
   "name": "pract-dpu",
   "private": true,
   "scripts": {

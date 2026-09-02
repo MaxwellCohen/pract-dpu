@@ -30,7 +30,7 @@ run("npm", ["run", "build"], RTS);
 
 if (!fs.existsSync(DEST)) {
   throw new Error(
-    `Missing ${DEST}. Run pnpm install first so the local RTS link exists.`,
+    `Missing ${DEST}. Run pnpm install first so preact-render-to-string is present.`,
   );
 }
 
@@ -49,7 +49,6 @@ run(
   ROOT,
 );
 run("rsync", ["-a", "--delete", `${path.join(RTS, "dist")}/`, `${path.join(DEST, "dist")}/`], ROOT);
-run("pnpm", ["install"], ROOT);
 
 console.log(`\nSynced ${RTS} → ${DEST}`);
 console.log("Restart pnpm dev if it is running.");

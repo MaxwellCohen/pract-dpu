@@ -2,4 +2,6 @@ packages:
   - "."
 allowBuilds:
   "@tailwindcss/oxide": true
-  "esbuild": true
+  esbuild: true
+overrides:
+  preact-render-to-string: https://pkg.csb.dev/MaxwellCohen/preact-render-to-string/commit/da72a46b/preact-render-to-string
