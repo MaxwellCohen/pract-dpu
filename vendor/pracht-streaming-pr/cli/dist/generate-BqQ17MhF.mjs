@@ -594,7 +594,7 @@ function generateCapability(args, project) {
 	], "read");
 	const expose = parseCommaList(args.expose);
 	for (const transport of expose) if (!CAPABILITY_TRANSPORTS.includes(transport)) throw new Error(`Unknown transport ${quote(transport)} in --expose. Expected one of ${CAPABILITY_TRANSPORTS.join(", ")}.`);
-	if (effect === "destructive" && expose.some((transport) => transport !== "http")) throw new Error("A destructive capability may only be exposed over http — agent hosts cannot be trusted to carry the prepare/commit confirmation flow. Drop webmcp/mcp from --expose.");
+	if (effect === "destructive" && expose.includes("webmcp")) throw new Error("A destructive capability cannot be a WebMCP page tool — a browser host's approval UX is not a security boundary. Use http, or mcp with agents.mcp.destructive.");
 	if (expose.includes("webmcp") && !expose.includes("http")) throw new Error("`--expose webmcp` requires http: the page tool calls the HTTP projection.");
 	if (expose.length > 0 && !args.description) throw new Error("`--description` is required when --expose is set: it is the contract text agents read, and `pracht verify` fails without one.");
 	const manifestPath = resolveProjectPath(project.root, project.appFile);

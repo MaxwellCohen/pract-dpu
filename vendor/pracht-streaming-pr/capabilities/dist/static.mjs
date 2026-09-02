@@ -1,4 +1,4 @@
-import { S as isValidCapabilityHttpPath, b as capabilityHttpPath } from "./protocol-Cx7CpoHZ.mjs";
+import { C as isValidCapabilityHttpPath, x as capabilityHttpPath } from "./protocol-Ck3OUbxD.mjs";
 //#region src/static.ts
 /**
 * Static analysis of capability sources — shared by the Vite plugin (client
@@ -33,10 +33,12 @@ function extractCapabilityProjection(name, source, describe) {
 	const exposeText = properties.get("expose");
 	if (!exposeText && truncated) throw new Error(describe("contains a spread or computed key the build cannot analyze, so its `expose` could not be read. Declare `expose`, `effect`, `agentPolicy`, and `middleware` as inline literals."));
 	if (!exposeText) return {
+		title: "",
 		description: "",
 		effect: null,
 		httpPath: null,
 		webmcp: false,
+		webmcpUntrustedContent: false,
 		inputSchema: null,
 		mcp: false,
 		...readGuardProperties(properties, truncated)
@@ -48,8 +50,20 @@ function extractCapabilityProjection(name, source, describe) {
 	if (http === true) httpPath = capabilityHttpPath(name);
 	else if (isPlainObject(http)) httpPath = typeof http.path === "string" ? http.path : capabilityHttpPath(name);
 	if (httpPath && !isValidCapabilityHttpPath(httpPath)) throw new Error(describe("HTTP exposure \"path\" must be an exact same-origin pathname starting with \"/\"."));
-	const webmcp = expose.webmcp === true;
+	let webmcp = false;
+	let webmcpUntrustedContent = false;
+	if (expose.webmcp === true) webmcp = true;
+	else if (isPlainObject(expose.webmcp)) {
+		webmcp = true;
+		webmcpUntrustedContent = expose.webmcp.untrustedContent === true;
+	} else if (expose.webmcp !== void 0 && expose.webmcp !== false && expose.webmcp !== null) throw new Error(describe("\"expose.webmcp\" must be a boolean or an options object."));
 	if (webmcp && !httpPath) throw new Error(describe("expose.webmcp requires expose.http."));
+	let title = "";
+	const titleText = properties.get("title");
+	if (titleText) {
+		const value = evaluateLiteral(titleText);
+		if (typeof value === "string") title = value;
+	}
 	let description = "";
 	const descriptionText = properties.get("description");
 	if (descriptionText) {
@@ -71,10 +85,12 @@ function extractCapabilityProjection(name, source, describe) {
 		inputSchema = value;
 	}
 	return {
+		title,
 		description,
 		effect,
 		httpPath,
 		webmcp,
+		webmcpUntrustedContent,
 		inputSchema,
 		mcp: expose.mcp === true,
 		...readGuardProperties(properties, truncated)

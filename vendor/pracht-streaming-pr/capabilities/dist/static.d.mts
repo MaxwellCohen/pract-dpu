@@ -18,10 +18,14 @@
  * registers a WebMCP page tool, and the input schema that tool advertises.
  */
 interface CapabilityProjection {
+  /** Empty when `title` is not an inline string literal — the WebMCP descriptor omits it then. */
+  title: string;
   description: string;
   effect: string | null;
   httpPath: string | null;
   webmcp: boolean;
+  /** The WebMCP tool's `untrustedContentHint` annotation. Always `false` when `webmcp` is `false`. */
+  webmcpUntrustedContent: boolean;
   inputSchema: Record<string, unknown> | null;
   /**
    * Remote MCP exposure. Not part of the browser projection — the client

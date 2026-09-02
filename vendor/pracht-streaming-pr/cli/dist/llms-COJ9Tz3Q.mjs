@@ -1,5 +1,5 @@
 import { a as readProjectConfig } from "./project-C-2I9C0N.mjs";
-import { t as AUTHORING_GUIDE } from "./authoring-guide-Cu4ksJ7k.mjs";
+import { t as AUTHORING_GUIDE } from "./authoring-guide-B0FQPyFK.mjs";
 import { defineCommand } from "citty";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -46,9 +46,9 @@ var llms_default = defineCommand({
 	}
 });
 /** Whether the app enables the vite plugin's `llmsTxt` option. */
-function projectPublishesItsOwnLlmsTxt() {
+function projectPublishesItsOwnLlmsTxt(root = process.cwd()) {
 	try {
-		const project = readProjectConfig(process.cwd());
+		const project = readProjectConfig(root);
 		if (!project.configFile) return false;
 		const source = readFileSync(project.configFile, "utf-8");
 		return /\bllmsTxt\s*:/.test(source) && !/\bllmsTxt\s*:\s*false\b/.test(source);

@@ -1,0 +1,1 @@
+import { PrachtAgentIdentity } from "@pracht/capabilities";

@@ -1,8 +1,8 @@
 import { withBase } from "./base.mjs";
 import { buildPathFromSegments } from "./route-matching.mjs";
 import { matchRoutePattern } from "./constraints.mjs";
-import { API_METHOD_ORDER } from "./app-graph.mjs";
 import { resolveRegistryModule } from "./runtime-manifest.mjs";
+import { API_METHOD_ORDER } from "./app-graph.mjs";
 import { hasMarkdownRepresentation } from "./runtime-negotiation.mjs";
 /**
 * Path segments pracht reserves for its own endpoints. `/api/_pracht/image` is

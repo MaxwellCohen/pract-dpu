@@ -1,5 +1,5 @@
-import { NOT_FOUND_ROUTE_ID, ROUTE_STATE_REQUEST_HEADER } from "./runtime-constants.mjs";
 import { withBase } from "./base.mjs";
+import { NOT_FOUND_ROUTE_ID, ROUTE_STATE_REQUEST_HEADER } from "./runtime-constants.mjs";
 import { buildPathFromSegments } from "./route-matching.mjs";
 import { resolveApp } from "./app.mjs";
 import { resolveRegistryModule } from "./runtime-manifest.mjs";

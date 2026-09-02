@@ -81,4 +81,4 @@ async function resolveDataFunctions(route, routeModule, registry) {
 	};
 }
 //#endregion
-export { CLIENT_ENTRY_MANIFEST_KEY, ISLANDS_ENTRY_MANIFEST_KEY, mergeEntryPreloadUrls, resolveDataFunctions, resolveManifestEntries, resolvePageCssUrls, resolvePageJsUrls, resolveRegistryModule };
+export { CLIENT_ENTRY_MANIFEST_KEY, ISLANDS_ENTRY_MANIFEST_KEY, mergeEntryPreloadUrls, normalizeModulePath, resolveDataFunctions, resolveManifestEntries, resolvePageCssUrls, resolvePageJsUrls, resolveRegistryModule };

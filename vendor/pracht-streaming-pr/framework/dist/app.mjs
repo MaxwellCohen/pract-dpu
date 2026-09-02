@@ -1,5 +1,7 @@
+import { withBase } from "./base.mjs";
+import { NOT_FOUND_ROUTE_ID, NOT_FOUND_ROUTE_PATH, OAUTH_PROTECTED_RESOURCE_WELL_KNOWN } from "./runtime-constants.mjs";
+import { isValidOAuthScopeToken } from "./mcp-config.mjs";
 import { formatUnknownNameError } from "./name-suggestions.mjs";
-import { NOT_FOUND_ROUTE_ID, NOT_FOUND_ROUTE_PATH } from "./runtime-constants.mjs";
 import { matchResolvedRoute, matchRouteSegments, normalizeRoutePath, parseRouteSegments, splitPathSegments } from "./route-matching.mjs";
 import { isValidCapabilityHttpPath } from "@pracht/capabilities";
 //#region src/app.ts
@@ -49,7 +51,7 @@ function defineApp(config) {
 		shells: resolveModuleRefRecord(config.shells ?? {}),
 		middleware: resolveModuleRefRecord(config.middleware ?? {}),
 		capabilities: resolveModuleRefRecord(config.capabilities ?? {}),
-		agents: config.agents,
+		agents: resolveAgentsModuleRefs(config.agents),
 		api: config.api ?? {},
 		routes: config.routes,
 		notFound: resolveNotFoundDefinition(config.notFound),
@@ -67,6 +69,26 @@ function resolveNotFoundDefinition(notFound) {
 		loaderFile: resolveModuleRef(loader),
 		hasLoader: loader ? true : void 0,
 		...meta
+	};
+}
+/**
+* The one ModuleRef inside `agents`: the remote MCP token verifier. Resolving
+* it here keeps the rest of the config plain serializable data, which is what
+* every consumer of `app.agents` (client manifest, graph snapshot, verify)
+* already assumes.
+*/
+function resolveAgentsModuleRefs(agents) {
+	const auth = agents?.mcp?.auth;
+	if (!auth || typeof auth.verify !== "function") return agents;
+	return {
+		...agents,
+		mcp: {
+			...agents.mcp,
+			auth: {
+				...auth,
+				verify: resolveModuleRef(auth.verify)
+			}
+		}
 	};
 }
 function resolveModuleRefRecord(record) {
@@ -307,6 +329,34 @@ function assertKnownMetaKeys(meta, allowed, context) {
 }
 const AGENT_POLICY_MODES = ["observe", "require"];
 const CONFIRMATION_MODES = ["token", "human"];
+const MCP_CONFIG_KEYS = [
+	"path",
+	"serverInfo",
+	"instructions",
+	"destructive",
+	"auth"
+];
+const MCP_AUTH_CONFIG_KEYS = [
+	"resource",
+	"authorizationServers",
+	"scopesSupported",
+	"requiredScopes",
+	"resourceDocumentation",
+	"verify"
+];
+/** Security configuration must reject misspelled fields in every server build. */
+function assertKnownSecurityKeys(config, allowed, context) {
+	for (const key of Object.keys(config)) {
+		if (allowed.includes(key)) continue;
+		throw new Error(formatUnknownNameError({
+			kind: "option",
+			kindPlural: "options",
+			name: key,
+			registered: allowed,
+			context
+		}));
+	}
+}
 /**
 * Validate `defineApp({ agents })`. The security-relevant setting — the Web
 * Bot Auth `policy` — is compared with `=== "require"` at dispatch, so a typo
@@ -328,7 +378,76 @@ function validateAgentsConfig(agents) {
 		if (confirmation.mode !== void 0 && !CONFIRMATION_MODES.includes(confirmation.mode)) throw new Error(`defineApp({ agents.confirmation.mode }) must be one of ${CONFIRMATION_MODES.map((mode) => `"${mode}"`).join(", ")}, got ${JSON.stringify(confirmation.mode)}.`);
 		assertPositiveNumber(confirmation.ttlSeconds, "agents.confirmation.ttlSeconds");
 	}
-	if (mcp?.path !== void 0 && !isValidCapabilityHttpPath(mcp.path)) throw new Error("defineApp({ agents.mcp.path }) must be an exact same-origin pathname starting with \"/\".");
+	if (mcp) {
+		assertKnownSecurityKeys(mcp, MCP_CONFIG_KEYS, "defineApp({ agents.mcp })");
+		if (mcp.path !== void 0 && !isValidCapabilityHttpPath(mcp.path)) throw new Error("defineApp({ agents.mcp.path }) must be an exact same-origin pathname starting with \"/\".");
+	}
+	if (mcp?.destructive !== void 0 && typeof mcp.destructive !== "boolean") throw new Error(`defineApp({ agents.mcp.destructive }) must be a boolean, got ${JSON.stringify(mcp.destructive)}.`);
+	if (typeof __PRACHT_AGENT_SURFACE__ === "undefined" || __PRACHT_AGENT_SURFACE__) {
+		if (mcp?.auth) validateMcpAuthConfig(mcp);
+	}
+}
+/**
+* `agents.mcp.auth` turns `/mcp` into an OAuth protected resource. Every field
+* here feeds either the published metadata document or the token gate, so a
+* malformed value is a security misconfiguration, not a cosmetic one: a
+* relative `resource` cannot be an audience, and a missing `verify` would leave
+* the endpoint advertising authentication it does not perform.
+*/
+function validateMcpAuthConfig(mcp) {
+	const auth = mcp.auth;
+	assertKnownSecurityKeys(auth, MCP_AUTH_CONFIG_KEYS, "defineApp({ agents.mcp.auth })");
+	const label = "defineApp({ agents.mcp.auth";
+	const resource = assertAbsoluteUrl(auth.resource, `${label}.resource })`);
+	if (resource.search || resource.hash) throw new Error(`${label}.resource }) must not carry a query string or fragment, got ${JSON.stringify(auth.resource)}.`);
+	assertCanonicalOAuthUrl(auth.resource, resource, `${label}.resource })`, true);
+	const endpoint = (mcp.path ?? "/mcp").replace(/\/$/, "") || "/";
+	if (endpoint === "/.well-known/oauth-protected-resource") throw new Error(`${label}.path }) must not use the reserved OAuth protected-resource metadata path ${JSON.stringify(OAUTH_PROTECTED_RESOURCE_WELL_KNOWN)}.`);
+	const resourcePath = resource.pathname || "/";
+	if (resourcePath.length > 1 && resourcePath.endsWith("/")) throw new Error(`${label}.resource must not carry a trailing slash. OAuth resource identifiers are matched exactly; use the endpoint's canonical path ${JSON.stringify(endpoint)}.`);
+	const publicEndpoint = withBase(endpoint).replace(/\/$/, "") || "/";
+	if (resourcePath !== publicEndpoint) throw new Error(`${label}.resource }) path ${JSON.stringify(resource.pathname)} does not address the MCP endpoint ${JSON.stringify(publicEndpoint)}. The resource identifier is the token audience; it must be the endpoint's exact absolute public URL, including the configured deploy base.`);
+	if (!Array.isArray(auth.authorizationServers) || auth.authorizationServers.length === 0) throw new Error(`${label}.authorizationServers }) must list at least one absolute authorization server issuer URL.`);
+	for (const issuer of auth.authorizationServers) {
+		const issuerUrl = assertAbsoluteUrl(issuer, `${label}.authorizationServers })`);
+		if (issuerUrl.search || issuerUrl.hash) throw new Error(`${label}.authorizationServers }) issuer URLs must not carry a query string or fragment, got ${JSON.stringify(issuer)}.`);
+		assertCanonicalOAuthUrl(issuer, issuerUrl, `${label}.authorizationServers })`, true);
+	}
+	if (auth.resourceDocumentation !== void 0) assertAbsoluteUrl(auth.resourceDocumentation, `${label}.resourceDocumentation })`);
+	assertScopeList(auth.scopesSupported, `${label}.scopesSupported })`);
+	assertScopeList(auth.requiredScopes, `${label}.requiredScopes })`);
+	if (typeof auth.verify !== "string" || auth.verify === "") throw new Error(`${label}.verify }) must reference a server-only module whose default export verifies a bearer token, e.g. \`verify: () => import("./server/mcp-token.ts")\`.`);
+}
+function assertAbsoluteUrl(value, label) {
+	if (typeof value !== "string" || value === "") throw new Error(`${label} must be an absolute URL string, got ${JSON.stringify(value)}.`);
+	let url;
+	try {
+		url = new URL(value);
+	} catch {
+		throw new Error(`${label} must be an absolute URL, got ${JSON.stringify(value)}.`);
+	}
+	if (url.protocol !== "https:" && !(url.protocol === "http:" && isLoopbackHost(url.hostname))) throw new Error(`${label} must use https (http is allowed for loopback development only).`);
+	return url;
+}
+/**
+* OAuth identifiers are compared as exact strings. Reject spellings whose URL
+* serialization changes their host, port, or path instead of publishing one
+* value while requests and challenges use another. A root issuer without the
+* URL serializer's implicit trailing slash remains valid (and conventional).
+*/
+function assertCanonicalOAuthUrl(value, url, label, allowRootWithoutSlash) {
+	const rootWithoutSlash = allowRootWithoutSlash && url.pathname === "/" && url.search === "" && url.hash === "" && url.href === `${value}/`;
+	if (url.href === value || rootWithoutSlash) return;
+	throw new Error(`${label} must use its canonical URL spelling ${JSON.stringify(url.href)} because OAuth identifiers are matched exactly; got ${JSON.stringify(value)}.`);
+}
+function isLoopbackHost(hostname) {
+	if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname === "[::1]") return true;
+	const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(hostname);
+	return !!ipv4 && Number(ipv4[1]) === 127 && ipv4.slice(1).every((part) => Number(part) <= 255);
+}
+function assertScopeList(value, label) {
+	if (value === void 0) return;
+	if (!Array.isArray(value) || value.some((scope) => !isValidOAuthScopeToken(scope))) throw new Error(`${label} must be an array of OAuth scope tokens using printable ASCII except quotes and backslashes.`);
 }
 function assertPositiveNumber(value, label) {
 	if (value === void 0) return;

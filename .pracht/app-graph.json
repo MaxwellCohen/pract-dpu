@@ -1,5 +1,5 @@
 {
-  "prachtGraphVersion": 1,
+  "prachtGraphVersion": 2,
   "mode": "manifest",
   "routes": [
     {
@@ -30,6 +30,24 @@
         "no-js"
       ],
       "path": "/basic",
+      "prefetch": null,
+      "render": "ssr",
+      "revalidate": null,
+      "shell": "public",
+      "shellFile": "./shells/public.tsx",
+      "speculation": null,
+      "streaming": true
+    },
+    {
+      "file": "./routes/edge-cases.tsx",
+      "hydration": null,
+      "id": "edge-cases",
+      "loaderCache": null,
+      "loaderFile": null,
+      "middleware": [
+        "no-js"
+      ],
+      "path": "/edge-cases",
       "prefetch": null,
       "render": "ssr",
       "revalidate": null,
@@ -131,5 +149,7 @@
   ],
   "capabilities": [],
   "mcpEndpoint": null,
+  "mcpAuthenticated": false,
+  "mcpAuth": null,
   "constraints": []
 }

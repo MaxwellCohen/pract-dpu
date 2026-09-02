@@ -1,5 +1,11 @@
+import { stripBaseLenient } from "./base.mjs";
+import { OAUTH_PROTECTED_RESOURCE_WELL_KNOWN } from "./runtime-constants.mjs";
 import { DEFAULT_MCP_ENDPOINT } from "@pracht/capabilities";
 //#region src/mcp-config.ts
+/** RFC 6749 Appendix A.4 `scope-token` (printable ASCII except `"` and `\\`). */
+function isValidOAuthScopeToken(value) {
+	return typeof value === "string" && /^[\x21\x23-\x5b\x5d-\x7e]+$/.test(value);
+}
 /** Resolved endpoint path, or `null` when the app does not serve MCP. */
 function resolveMcpEndpoint(agents) {
 	const config = agents?.mcp;
@@ -7,5 +13,52 @@ function resolveMcpEndpoint(agents) {
 	const path = config.path ?? DEFAULT_MCP_ENDPOINT;
 	return path.endsWith("/") && path.length > 1 ? path.slice(0, -1) : path;
 }
+/**
+* The pathname RFC 9728 §3.1 assigns to a resource identifier: the well-known
+* segment is inserted *between* the host and the resource's own path, so
+* `https://app.example/mcp` publishes at
+* `/.well-known/oauth-protected-resource/mcp`.
+*
+* Note what that means under a deploy base. An app mounted at `/app/` whose
+* resource is `https://app.example/app/mcp` publishes at
+* `https://app.example/.well-known/oauth-protected-resource/app/mcp` — origin
+* root, base *inside* the suffix, not in front of it. The base is part of the
+* resource path, never a prefix of the well-known segment.
+*/
+function mcpResourceMetadataPath(auth) {
+	let resourcePath;
+	try {
+		resourcePath = new URL(auth.resource).pathname;
+	} catch {
+		resourcePath = "/";
+	}
+	const trimmed = resourcePath.replace(/\/+$/, "");
+	return trimmed === "" ? OAUTH_PROTECTED_RESOURCE_WELL_KNOWN : `${OAUTH_PROTECTED_RESOURCE_WELL_KNOWN}${trimmed}`;
+}
+/** Absolute metadata URL — what the `WWW-Authenticate` challenge points at. */
+function mcpResourceMetadataUrl(auth) {
+	return new URL(mcpResourceMetadataPath(auth), auth.resource).href;
+}
+/**
+* Whether a **URL** pathname addresses the metadata document.
+*
+* Takes the raw `url.pathname`, not a base-stripped route path: the document
+* lives at the origin root, so `stripBase()` answers `null` for it and the
+* request would 404 before ever reaching the MCP surface. `stripBaseLenient()`
+* is applied anyway so that a reverse proxy which re-prefixes the base (the
+* `basePathStripped` path) still resolves to the same document instead of
+* silently losing discovery.
+*
+* Both the RFC 9728 path-inserted form and the bare well-known root answer,
+* because hosts in the wild probe either. One trailing slash is tolerated, as
+* it is on the MCP endpoint itself.
+*/
+function isMcpResourceMetadataPath(pathname, auth) {
+	for (const candidate of new Set([pathname, stripBaseLenient(pathname)])) {
+		const normalized = candidate.length > 1 && candidate.endsWith("/") ? candidate.slice(0, -1) : candidate;
+		if (normalized === mcpResourceMetadataPath(auth) || normalized === "/.well-known/oauth-protected-resource") return true;
+	}
+	return false;
+}
 //#endregion
-export { resolveMcpEndpoint };
+export { isMcpResourceMetadataPath, isValidOAuthScopeToken, mcpResourceMetadataPath, mcpResourceMetadataUrl, resolveMcpEndpoint };

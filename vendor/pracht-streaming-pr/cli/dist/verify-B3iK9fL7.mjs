@@ -1,4 +1,4 @@
-import { n as runVerification } from "./verification-C-W0SniA.mjs";
+import { n as runVerification } from "./verification-DKDfRzp_.mjs";
 import { defineCommand } from "citty";
 //#region src/commands/verify.ts
 var verify_default = defineCommand({

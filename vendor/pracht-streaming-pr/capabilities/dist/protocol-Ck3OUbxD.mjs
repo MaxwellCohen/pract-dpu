@@ -79,6 +79,17 @@ function isValidMcpToolName(toolName) {
 	return typeof toolName === "string" && MCP_TOOL_NAME_RE.test(toolName);
 }
 /**
+* The WebMCP CG draft's tool-name constraint: 1–128 ASCII letters, digits,
+* `_`, `-`, or `.` — registration rejects anything else. Capability names are
+* projected verbatim (dots included), so `pracht verify` checks them against
+* this rather than letting registration fail silently in the page.
+*/
+const WEBMCP_TOOL_NAME_RE = /^[a-zA-Z0-9_.-]{1,128}$/;
+const WEBMCP_TOOL_NAME_ERROR = "is exposed via WebMCP, but its name is not a valid WebMCP tool name (1-128 ASCII letters, digits, '_', '-', or '.') — the browser would reject the registration";
+function isValidWebmcpToolName(toolName) {
+	return typeof toolName === "string" && WEBMCP_TOOL_NAME_RE.test(toolName);
+}
+/**
 * Capability names that would produce the same MCP tool name (e.g.
 * `notes.search` and `notes_search`). `pracht verify` rejects these, and the
 * runtime refuses to serve an ambiguous graph.
@@ -165,4 +176,4 @@ const CAPABILITY_FORM_REDIRECT_HEADER = "x-pracht-capability-redirect";
 */
 const CAPABILITY_SETTLED_EVENT = "pracht:capability-settled";
 //#endregion
-export { isValidMcpToolName as C, isValidCapabilityHttpPath as S, normalizeCapabilityHttpPath as T, MCP_PROTOCOL_VERSION_HEADER as _, CAPABILITY_HTTP_PREFIX as a, capabilityHttpPath as b, CONFIRMATION_HEADER as c, MCP_CAPABILITY_META_KEY as d, MCP_CONFIRMATION_META_KEY as f, MCP_PROTOCOL_VERSIONS as g, MCP_LATEST_PROTOCOL_VERSION as h, CAPABILITY_FORM_REQUEST_HEADER as i, CONFIRMATION_SECRET_ENV as l, MCP_ERROR_META_KEY as m, CAPABILITY_ERROR_CODES as n, CAPABILITY_SETTLED_EVENT as o, MCP_EFFECT_META_KEY as p, CAPABILITY_FORM_REDIRECT_HEADER as r, CAPABILITY_TRANSPORT_HEADER as s, CAPABILITY_EFFECT_HEADER as t, DEFAULT_MCP_ENDPOINT as u, MCP_STATUS_META_KEY as v, mcpToolName as w, findMcpToolNameCollisions as x, MCP_TOOL_NAME_ERROR as y };
+export { isValidCapabilityHttpPath as C, normalizeCapabilityHttpPath as D, mcpToolName as E, findMcpToolNameCollisions as S, isValidWebmcpToolName as T, MCP_PROTOCOL_VERSION_HEADER as _, CAPABILITY_HTTP_PREFIX as a, WEBMCP_TOOL_NAME_ERROR as b, CONFIRMATION_HEADER as c, MCP_CAPABILITY_META_KEY as d, MCP_CONFIRMATION_META_KEY as f, MCP_PROTOCOL_VERSIONS as g, MCP_LATEST_PROTOCOL_VERSION as h, CAPABILITY_FORM_REQUEST_HEADER as i, CONFIRMATION_SECRET_ENV as l, MCP_ERROR_META_KEY as m, CAPABILITY_ERROR_CODES as n, CAPABILITY_SETTLED_EVENT as o, MCP_EFFECT_META_KEY as p, CAPABILITY_FORM_REDIRECT_HEADER as r, CAPABILITY_TRANSPORT_HEADER as s, CAPABILITY_EFFECT_HEADER as t, DEFAULT_MCP_ENDPOINT as u, MCP_STATUS_META_KEY as v, isValidMcpToolName as w, capabilityHttpPath as x, MCP_TOOL_NAME_ERROR as y };

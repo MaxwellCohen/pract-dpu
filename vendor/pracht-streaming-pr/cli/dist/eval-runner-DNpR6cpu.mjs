@@ -21,6 +21,7 @@ import { createAgentSignatureHeaders } from "@pracht/core/agent-auth";
 *     "url": "http://localhost:3000",        // optional; --url overrides
 *     "transport": "http",                   // or "mcp"; default "http"
 *     "mcpPath": "/mcp",                     // MCP endpoint, when it is not the default
+*     "mcpHeaders": { "authorization": "Bearer ..." }, // every MCP request
 *     "steps": [
 *       {
 *         "capability": "notes.search",       // or "path": "/api/custom"
@@ -43,13 +44,11 @@ import { createAgentSignatureHeaders } from "@pracht/core/agent-auth";
 * signs the JSON-RPC POSTs, so an agent-identity policy is exercisable on
 * either transport.
 *
-* What MCP cannot do yet: the destructive prepare/commit flow. Destructive
-* capabilities are refused `expose.mcp` at registration and filtered at serve
-* time, so no MCP tool can answer `confirmation_required`. `confirm` is still
-* carried in the `tools/call` `_meta` — the slot the projection reads — so the
-* client half is ready for the destructive-over-MCP opt-in; until then those
-* scenarios belong on the HTTP transport. Step `headers` are likewise limited
-* to `authorization` over MCP, the only header the projection forwards.
+* Destructive prepare/commit works over MCP when the app opts in, exposes the
+* capability, and registers an approval store. `confirm` is carried in the
+* `tools/call` `_meta["io.pracht/confirmation"]` field — the slot the
+* projection reads. Step `headers` are still limited to `authorization` over
+* MCP, the only header the projection forwards.
 *
 * Reference syntax: a string value that is exactly `$steps[<index>].<path>`
 * is replaced with that value from an earlier step's result. The root object
@@ -103,6 +102,17 @@ function parseScenario(file) {
 	if (scenario.mcpPath !== void 0) {
 		if (typeof scenario.mcpPath !== "string" || !scenario.mcpPath.startsWith("/")) throw new Error("\"mcpPath\" must be an absolute path such as \"/mcp\"");
 		if (scenario.transport !== "mcp") throw new Error("\"mcpPath\" only applies to a scenario with \"transport\": \"mcp\"");
+	}
+	if (scenario.mcpHeaders !== void 0) {
+		if (scenario.transport !== "mcp") throw new Error("\"mcpHeaders\" only applies to a scenario with \"transport\": \"mcp\"");
+		if (!scenario.mcpHeaders || typeof scenario.mcpHeaders !== "object" || Array.isArray(scenario.mcpHeaders)) throw new Error("\"mcpHeaders\" must be an object of string header values");
+		const normalizedHeaders = {};
+		for (const [name, value] of Object.entries(scenario.mcpHeaders)) {
+			if (name.toLowerCase() !== MCP_FORWARDED_HEADER) throw new Error(`"mcpHeaders" sets ${JSON.stringify(name)}, but only ${JSON.stringify(MCP_FORWARDED_HEADER)} is supported`);
+			if (typeof value !== "string") throw new Error(`"mcpHeaders.${name}" must be a string`);
+			normalizedHeaders[MCP_FORWARDED_HEADER] = value;
+		}
+		scenario.mcpHeaders = normalizedHeaders;
 	}
 	if (scenario.transport === "mcp") {
 		const withPath = scenario.steps.findIndex((step) => step.path !== void 0);
@@ -312,6 +322,7 @@ const MCP_REFUSED_HEADERS = [
 async function openMcpSession(endpoint, scenario, fetchImpl) {
 	const session = {
 		endpoint,
+		headers: { ...scenario.mcpHeaders },
 		protocolVersion: MCP_LATEST_PROTOCOL_VERSION,
 		nextId: 1,
 		signAs: scenario.signAs,
@@ -377,6 +388,7 @@ async function mcpRequest(session, options) {
 	const headers = {
 		"content-type": "application/json",
 		accept: "application/json, text/event-stream",
+		...session.headers,
 		...options.headers
 	};
 	if (options.declareProtocolVersion !== false) headers[MCP_PROTOCOL_VERSION_HEADER] = session.protocolVersion;
@@ -498,15 +510,18 @@ function toolResultText(result) {
 function describeMcpEndpointStatus(endpoint, response) {
 	const detail = snippet(response.bodyText);
 	switch (response.status) {
+		case 401: return `${endpoint} returned 401 — the MCP endpoint requires authorization. Set \`"mcpHeaders": { "authorization": "Bearer ..." }\` on the scenario so the token is sent during initialization and every later request. ` + detail;
 		case 404: return `${endpoint} returned 404 — the app does not serve remote MCP there. Enable it with \`defineApp({ agents: { mcp: {} } })\`, or point the scenario at the right path with "mcpPath".`;
-		case 403: return `${endpoint} returned 403 — the MCP projection refuses browser-originated and cookie-authenticated requests. Remove any "cookie"/"origin" step headers. ${detail}`;
+		case 403:
+			if (asRecord(response.body)?.error === "insufficient_scope") return `${endpoint} returned 403 insufficient_scope — the bearer token lacks one or more required OAuth scopes. Obtain a token with the scopes named by the challenge and update "mcpHeaders". ${detail}`;
+			return `${endpoint} returned 403 — the MCP projection refuses browser-originated and cookie-authenticated requests. Remove any "cookie"/"origin" step headers. ${detail}`;
 		case 405: return `${endpoint} returned 405 — that path does not accept the JSON-RPC POST an MCP client makes. ${detail}`;
 		default: return `${endpoint} answered ${response.status} for a JSON-RPC POST. ${detail}`;
 	}
 }
 function describeToolCallRejection(capability, toolName, error) {
 	const described = describeJsonRpcError(error);
-	if (/unknown tool/i.test(described)) return `the app's MCP endpoint does not serve a tool for capability "${capability}" (expected "${toolName}"). Give the capability \`expose: { mcp: true }\`, or run this step over the default "http" transport — destructive capabilities are never projected as MCP tools. Server said: ${described}`;
+	if (/unknown tool/i.test(described)) return `the app's MCP endpoint does not serve a tool for capability "${capability}" (expected "${toolName}"). Give the capability \`expose: { mcp: true }\`. If it is destructive, also configure \`agents.mcp.destructive\`, a confirmation secret, and a registered approval store; otherwise run this step over the default "http" transport. Server said: ${described}`;
 	return `tools/call for "${toolName}" was rejected: ${described}`;
 }
 function describeJsonRpcError(error) {

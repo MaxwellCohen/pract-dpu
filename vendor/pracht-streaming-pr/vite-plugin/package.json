@@ -1,6 +1,6 @@
 {
   "name": "@pracht/vite-plugin",
-  "version": "0.10.0-streaming.pr340",
+  "version": "0.11.1-streaming.pr340",
   "description": "Vite plugin for Pracht apps with virtual modules, dev SSR, prerendering, route inspection, and multi-adapter builds.",
   "keywords": [
     "pracht",
@@ -25,7 +25,8 @@
     "directory": "packages/vite-plugin"
   },
   "files": [
-    "dist"
+    "dist",
+    "virtual.d.ts"
   ],
   "type": "module",
   "exports": {
@@ -36,6 +37,9 @@
     "./pages-router": {
       "types": "./dist/pages-router.d.mts",
       "default": "./dist/pages-router.mjs"
+    },
+    "./virtual": {
+      "types": "./virtual.d.ts"
     }
   },
   "publishConfig": {

@@ -1,5 +1,5 @@
-import { PREFETCH_ATTRIBUTE, SPECULATE_ATTRIBUTE } from "./runtime-constants.mjs";
 import { stripBase } from "./base.mjs";
+import { PREFETCH_ATTRIBUTE, SPECULATE_ATTRIBUTE } from "./runtime-constants.mjs";
 import { matchResolvedRoute } from "./route-matching.mjs";
 import { trimMapToSize } from "./prefetch-cache.mjs";
 import { isSpeculationSuppressed, normalizeSpeculation, supportsSpeculationRules } from "./runtime-speculation.mjs";

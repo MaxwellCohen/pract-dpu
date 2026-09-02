@@ -1,6 +1,6 @@
 import { t as __exportAll } from "./rolldown-runtime-wcPFST8Q.mjs";
+import { a as readGraphSnapshotFromDisk, c as resolveLiveGraph, f as writeGraphSnapshot, i as formatPlanText, n as diffGraphSnapshots, o as readRouteBudgets, r as formatPlanMarkdown, s as resolveBaseSnapshot, t as GRAPH_SNAPSHOT_PATH, u as serializeGraphSnapshot } from "./graph-snapshot-C3nG4UBK.mjs";
 import { n as displayPath, p as handleCliError } from "./project-C-2I9C0N.mjs";
-import { a as readGraphSnapshotFromDisk, c as resolveLiveGraph, d as writeGraphSnapshot, i as formatPlanText, n as diffGraphSnapshots, o as readRouteBudgets, r as formatPlanMarkdown, s as resolveBaseSnapshot, t as GRAPH_SNAPSHOT_PATH, u as serializeGraphSnapshot } from "./graph-snapshot-NZsnRhiN.mjs";
 import { defineCommand } from "citty";
 //#region src/commands/plan.ts
 var plan_exports = /* @__PURE__ */ __exportAll({
@@ -11,12 +11,14 @@ var plan_exports = /* @__PURE__ */ __exportAll({
 });
 const DEFAULT_BASE_REF = "origin/main";
 const EMPTY_GRAPH = {
-	prachtGraphVersion: 1,
+	prachtGraphVersion: 2,
 	mode: "manifest",
 	routes: [],
 	api: [],
 	capabilities: [],
 	mcpEndpoint: null,
+	mcpAuthenticated: false,
+	mcpAuth: null,
 	constraints: []
 };
 var plan_default = defineCommand({

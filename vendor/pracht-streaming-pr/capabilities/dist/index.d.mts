@@ -61,6 +61,8 @@ declare const MCP_TOOL_NAME_ERROR = "projected MCP tool names must match ^[a-zA-
 declare function mcpToolName(capabilityName: string): string;
 /** Whether a projected tool name is accepted by the MCP hosts Pracht targets. */
 declare function isValidMcpToolName(toolName: unknown): toolName is string;
+declare const WEBMCP_TOOL_NAME_ERROR: string;
+declare function isValidWebmcpToolName(toolName: unknown): toolName is string;
 interface McpToolNameCollision {
   toolName: string;
   capabilities: string[];
@@ -178,10 +180,12 @@ declare function validateAgainstSchema(schema: unknown, value: unknown, path?: s
 //#region src/capability.d.ts
 /**
  * Side-effect classification. Every capability must declare one; the
- * framework's exposure policy is driven by it. `destructive` capabilities
- * may only be exposed over HTTP, where every dispatch is gated by the
- * server-verified prepare/commit confirmation flow (see docs/AGENT_TRUST.md);
- * agent projections (`webmcp`/`mcp`) stay disallowed for them in v1.
+ * framework's exposure policy is driven by it. `destructive` capabilities may
+ * be exposed over HTTP and over remote MCP, where every dispatch is gated by
+ * the server-verified prepare/commit confirmation flow (see
+ * docs/AGENT_TRUST.md) — MCP additionally requires the `agents.mcp.destructive`
+ * opt-in. WebMCP page tools stay disallowed for them: a browser host's
+ * approval UX is not a security boundary.
  */
 type CapabilityEffect = "read" | "write" | "destructive";
 /**
@@ -202,16 +206,32 @@ interface CapabilityExposeConfig {
     method?: "POST";
     path?: string;
   };
-  /** Advertise the capability to the configured remote MCP projection. */
+  /**
+   * Advertise the capability to the configured remote MCP projection. A
+   * `destructive` capability is only served when the app also sets
+   * `agents.mcp.destructive`; otherwise the projection filters it out.
+   */
   mcp?: boolean;
-  /** Register the capability as a WebMCP page tool. Requires `http` — calls dispatch through the HTTP projection. */
-  webmcp?: boolean;
+  /**
+   * Register the capability as a WebMCP page tool. Requires `http` — calls
+   * dispatch through the HTTP projection. The object form sets
+   * `untrustedContent: true` to advertise the spec's `untrustedContentHint`
+   * annotation for tools whose results carry user-generated or third-party
+   * content the host should treat as untrusted.
+   */
+  webmcp?: boolean | CapabilityWebmcpOptions;
+}
+interface CapabilityWebmcpOptions {
+  /** Advertise `untrustedContentHint` — results may carry user-generated or third-party content. */
+  untrustedContent?: boolean;
 }
 /** Normalized exposure — what the framework and graph consume. */
 interface CapabilityExposure {
   http: CapabilityHttpExposure | null;
   mcp: boolean;
   webmcp: boolean;
+  /** The WebMCP tool's `untrustedContentHint` annotation. Always `false` when `webmcp` is `false`. */
+  webmcpUntrustedContent: boolean;
 }
 /**
  * The request context a capability handler receives by default: the verified
@@ -296,6 +316,14 @@ interface CapabilityErrorPayload {
    * never accepted from a caller.
    */
   approvalId?: string;
+  /**
+   * Present when a decided proposal is blocking a re-prepare of the identical
+   * operation: seconds until it expires and the operation can be proposed
+   * again. The refusal is deliberate — it stops an old still-valid token
+   * becoming reusable — so this says when to come back rather than inviting an
+   * immediate retry.
+   */
+  retryAfterSeconds?: number;
 }
 declare const DESTRUCTIVE_EXPOSURE_ERROR: string;
 declare const MCP_SCHEMA_ROOT_ERROR = "expose.mcp requires \"input\" and \"output\" schemas with type: \"object\" for the supported MCP protocol versions";
@@ -305,9 +333,14 @@ declare const MCP_SCHEMA_ROOT_ERROR = "expose.mcp requires \"input\" and \"outpu
  * Fails fast (throws) on invalid definitions instead of deferring problems to
  * request time: missing contract fields, schemas outside the supported JSON
  * Schema subset, `webmcp` exposure without an HTTP projection to dispatch
- * through, and `webmcp`/`mcp` exposure of a `destructive` capability
- * (destructive + `expose.http` is allowed — the runtime's server-verified
- * prepare/commit confirmation flow gates every dispatch).
+ * through, and `webmcp` exposure of a `destructive` capability.
+ *
+ * `destructive` + `expose.http` and `destructive` + `expose.mcp` are both
+ * allowed — the runtime's server-verified prepare/commit confirmation flow
+ * gates every dispatch on either transport. Serving destructive tools over
+ * remote MCP additionally requires the app-level `agents.mcp.destructive`
+ * opt-in and a registered approval store; without the opt-in the projection
+ * filters them out at serve time.
  */
 declare function defineCapability<TInput = unknown, TOutput = unknown, TContext = CapabilityContext>(definition: CapabilityDefinition<TInput, TOutput, TContext>): Capability<TInput, TOutput, TContext>;
 //#endregion
@@ -341,4 +374,4 @@ declare function coerceFormInput(schema: unknown, entries: Iterable<[string, unk
 type SchemaTypePosition = "input" | "output";
 declare function schemaToTypeText(schema: unknown, position: SchemaTypePosition): string;
 //#endregion
-export { CAPABILITY_EFFECT_HEADER, CAPABILITY_ERROR_CODES, CAPABILITY_FORM_REDIRECT_HEADER, CAPABILITY_FORM_REQUEST_HEADER, CAPABILITY_HTTP_PREFIX, CAPABILITY_SETTLED_EVENT, CAPABILITY_TRANSPORT_HEADER, CONFIRMATION_HEADER, CONFIRMATION_SECRET_ENV, type Capability, type CapabilityAgentPolicy, type CapabilityContext, type CapabilityDefinition, type CapabilityEffect, type CapabilityEnvelope, type CapabilityErrorCode, type CapabilityErrorPayload, type CapabilityExposeConfig, type CapabilityExposure, type CapabilityHttpExposure, type CapabilityIssue, type CapabilityRunArgs, type CapabilityValidationResult, DEFAULT_MCP_ENDPOINT, DESTRUCTIVE_EXPOSURE_ERROR, type JsonSchema, MCP_CAPABILITY_META_KEY, MCP_CONFIRMATION_META_KEY, MCP_EFFECT_META_KEY, MCP_ERROR_META_KEY, MCP_LATEST_PROTOCOL_VERSION, MCP_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSION_HEADER, MCP_SCHEMA_ROOT_ERROR, MCP_STATUS_META_KEY, MCP_TOOL_NAME_ERROR, type McpToolNameCollision, type PrachtAgentIdentity, type SchemaTypePosition, applySchemaDefaults, capabilityHttpPath, coerceFormInput, collectInvalidSchemaKeywordValues, collectUnsupportedSchemaKeywords, defineCapability, findMcpToolNameCollisions, isValidCapabilityHttpPath, isValidMcpToolName, mcpToolName, normalizeCapabilityHttpPath, schemaToTypeText, validateAgainstSchema };
+export { CAPABILITY_EFFECT_HEADER, CAPABILITY_ERROR_CODES, CAPABILITY_FORM_REDIRECT_HEADER, CAPABILITY_FORM_REQUEST_HEADER, CAPABILITY_HTTP_PREFIX, CAPABILITY_SETTLED_EVENT, CAPABILITY_TRANSPORT_HEADER, CONFIRMATION_HEADER, CONFIRMATION_SECRET_ENV, type Capability, type CapabilityAgentPolicy, type CapabilityContext, type CapabilityDefinition, type CapabilityEffect, type CapabilityEnvelope, type CapabilityErrorCode, type CapabilityErrorPayload, type CapabilityExposeConfig, type CapabilityExposure, type CapabilityHttpExposure, type CapabilityIssue, type CapabilityRunArgs, type CapabilityValidationResult, type CapabilityWebmcpOptions, DEFAULT_MCP_ENDPOINT, DESTRUCTIVE_EXPOSURE_ERROR, type JsonSchema, MCP_CAPABILITY_META_KEY, MCP_CONFIRMATION_META_KEY, MCP_EFFECT_META_KEY, MCP_ERROR_META_KEY, MCP_LATEST_PROTOCOL_VERSION, MCP_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSION_HEADER, MCP_SCHEMA_ROOT_ERROR, MCP_STATUS_META_KEY, MCP_TOOL_NAME_ERROR, type McpToolNameCollision, type PrachtAgentIdentity, type SchemaTypePosition, WEBMCP_TOOL_NAME_ERROR, applySchemaDefaults, capabilityHttpPath, coerceFormInput, collectInvalidSchemaKeywordValues, collectUnsupportedSchemaKeywords, defineCapability, findMcpToolNameCollisions, isValidCapabilityHttpPath, isValidMcpToolName, isValidWebmcpToolName, mcpToolName, normalizeCapabilityHttpPath, schemaToTypeText, validateAgainstSchema };

@@ -1,13 +1,13 @@
 import { r as VERSION } from "./index.mjs";
 import { a as readProjectConfig } from "./project-C-2I9C0N.mjs";
-import { i as runTypegen, n as DEFAULT_DECLARATION_OUT, r as DEFAULT_RUNTIME_OUT, t as DEFAULT_CAPABILITIES_OUT } from "./typegen-DI4BSR5Y.mjs";
-import { n as runInspect } from "./inspect-B_0KqO5L.mjs";
-import { n as runVerification, t as runDoctor } from "./verification-C-W0SniA.mjs";
-import { n as parseScenario, r as runScenario, t as findEvalFiles } from "./eval-runner-CXy8C9Lo.mjs";
-import { a as generateShell, i as generateRoute, n as generateCapability, r as generateMiddleware, t as generateApi } from "./generate-vKZ__lza.mjs";
-import { t as AUTHORING_GUIDE } from "./authoring-guide-Cu4ksJ7k.mjs";
-import { i as runPlan } from "./plan-cXvLMKiH.mjs";
-import { n as runReport } from "./report-Bnon9gjy.mjs";
+import { i as runTypegen, n as DEFAULT_DECLARATION_OUT, r as DEFAULT_RUNTIME_OUT, t as DEFAULT_CAPABILITIES_OUT } from "./typegen-q813DPhU.mjs";
+import { n as runInspect } from "./inspect-BepW0Qs9.mjs";
+import { n as runVerification, t as runDoctor } from "./verification-DKDfRzp_.mjs";
+import { n as parseScenario, r as runScenario, t as findEvalFiles } from "./eval-runner-DNpR6cpu.mjs";
+import { a as generateShell, i as generateRoute, n as generateCapability, r as generateMiddleware, t as generateApi } from "./generate-BqQ17MhF.mjs";
+import { t as AUTHORING_GUIDE } from "./authoring-guide-B0FQPyFK.mjs";
+import { i as runPlan } from "./plan-CONnOB3b.mjs";
+import { n as runReport } from "./report-Cli5wivd.mjs";
 import { defineCommand } from "citty";
 import { resolve } from "node:path";
 import { format } from "node:util";
@@ -30,9 +30,13 @@ function createPrachtMcpServer() {
 		inputSchema: { ...cwdInput }
 	}, guard(({ cwd }) => runInspect(resolveCwd(cwd), { target: "api" })));
 	server.registerTool("inspect_capabilities", {
-		description: "Inspect the registered capabilities of a pracht app: name, effect class, exposure transports (http/mcp/webmcp), HTTP path, middleware, source file. Same payload as `pracht inspect capabilities --json`.",
+		description: "Inspect the registered capabilities of a pracht app: name, effect class, exposure transports (http/mcp/webmcp), HTTP path, middleware, source file, plus the configured MCP endpoint, destructive opt-in, and runtime unavailability reasons. Same payload as `pracht inspect capabilities --json`.",
 		inputSchema: { ...cwdInput }
 	}, guard(({ cwd }) => runInspect(resolveCwd(cwd), { target: "capabilities" })));
+	server.registerTool("inspect_agents", {
+		description: "Summarize the configured agent surface of a pracht app: Web Bot Auth policy and keys, the destructive-confirmation mode, the remote MCP endpoint, whether llms.txt is generated, and which capabilities are exposed on which transports. Same payload as `pracht inspect agents --json`.",
+		inputSchema: { ...cwdInput }
+	}, guard(({ cwd }) => runInspect(resolveCwd(cwd), { target: "agents" })));
 	server.registerTool("inspect_build", {
 		description: "Inspect build metadata of a pracht app: adapter target, client entry URL, CSS/JS manifests. Requires a prior `pracht build`. Same payload as `pracht inspect build --json`.",
 		inputSchema: { ...cwdInput }
@@ -180,7 +184,7 @@ function createPrachtMcpServer() {
 				"read",
 				"write",
 				"destructive"
-			]).optional().describe("Effect class (defaults to read). `destructive` may only be exposed over http and is confirmation-gated."),
+			]).optional().describe("Effect class (defaults to read). `destructive` is confirmation-gated and may be exposed over http and mcp, never webmcp."),
 			expose: z.array(z.enum([
 				"http",
 				"webmcp",

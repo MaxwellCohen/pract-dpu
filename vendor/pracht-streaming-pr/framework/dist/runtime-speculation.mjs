@@ -1,5 +1,5 @@
-import { SPECULATE_ATTRIBUTE } from "./runtime-constants.mjs";
 import { PRACHT_BASE } from "./base.mjs";
+import { SPECULATE_ATTRIBUTE } from "./runtime-constants.mjs";
 //#region src/runtime-speculation.ts
 /**
 * Links the browser must never speculate, regardless of the route patterns

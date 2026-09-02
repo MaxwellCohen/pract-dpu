@@ -72,6 +72,22 @@ async function createConfirmationToken(binding) {
 	};
 }
 /**
+* Confirmation tokens are `<version>.<base64url claims>.<base64url hmac>`, so
+* every character is in the unpadded base64url alphabet plus `.`. 4 KB is far
+* above any real token and well under a header-size limit.
+*/
+const CONFIRMATION_TOKEN_SHAPE = /^[A-Za-z0-9._-]{1,4096}$/;
+/**
+* Cheap shape check for a token arriving through a channel that is not an HTTP
+* header — remote MCP carries it in a JSON `_meta` member, where a caller can
+* put a newline or a NUL that `Headers.set()` would throw on. Callers must
+* screen the value before it reaches a `Headers` object; the real decision is
+* still {@link verifyConfirmationToken}.
+*/
+function isWellFormedConfirmationToken(token) {
+	return CONFIRMATION_TOKEN_SHAPE.test(token);
+}
+/**
 * Verify a presented confirmation token against the current call. The
 * signature is checked first so nothing later in the pipeline trusts
 * attacker-controlled claims.
@@ -178,4 +194,4 @@ function base64UrlDecode(value) {
 	return bytes;
 }
 //#endregion
-export { CONFIRMATION_HEADER$1 as CONFIRMATION_HEADER, CONFIRMATION_SECRET_ENV, canonicalJson, consumeConfirmationToken, createConfirmationToken, hmacSha256Base64Url, resolveConfirmationSecret, setCapabilityConfirmationSecret, sha256Base64Url, verifyConfirmationToken };
+export { CONFIRMATION_HEADER$1 as CONFIRMATION_HEADER, CONFIRMATION_SECRET_ENV, canonicalJson, consumeConfirmationToken, createConfirmationToken, hmacSha256Base64Url, isWellFormedConfirmationToken, resolveConfirmationSecret, setCapabilityConfirmationSecret, sha256Base64Url, verifyConfirmationToken };

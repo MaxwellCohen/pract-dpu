@@ -12,6 +12,15 @@
 */
 const PRACHT_GRAPH_ONLY_ENV = "PRACHT_GRAPH_ONLY";
 const SAFE_METHODS = new Set(["GET", "HEAD"]);
+/**
+* RFC 9728 well-known prefix for OAuth 2.0 protected-resource metadata.
+*
+* Lives here, not in the MCP modules, because `handlePrachtRequest()` needs to
+* recognise the path *before* it loads anything MCP-related — and before base
+* stripping, since RFC 9728 §3.1 inserts this segment between the host and the
+* resource's path, putting the document at the origin root by construction.
+*/
+const OAUTH_PROTECTED_RESOURCE_WELL_KNOWN = "/.well-known/oauth-protected-resource";
 const HYDRATION_STATE_ELEMENT_ID = "pracht-state";
 const ROUTE_STATE_REQUEST_HEADER = "x-pracht-route-state-request";
 const ROUTE_STATE_CACHE_CONTROL = "no-store";
@@ -23,4 +32,4 @@ const PRESERVE_SCROLL_ATTRIBUTE = "data-pracht-preserve-scroll";
 const VIEW_TRANSITION_ATTRIBUTE = "data-pracht-view-transition";
 const SPECULATE_ATTRIBUTE = "data-pracht-speculate";
 //#endregion
-export { EMPTY_ROUTE_PARAMS, HYDRATION_STATE_ELEMENT_ID, NOT_FOUND_ROUTE_ID, NOT_FOUND_ROUTE_PATH, PRACHT_GRAPH_ONLY_ENV, PREFETCH_ATTRIBUTE, PRESERVE_SCROLL_ATTRIBUTE, ROUTE_STATE_CACHE_CONTROL, ROUTE_STATE_REQUEST_HEADER, SAFE_METHODS, SPECULATE_ATTRIBUTE, VIEW_TRANSITION_ATTRIBUTE };
+export { EMPTY_ROUTE_PARAMS, HYDRATION_STATE_ELEMENT_ID, NOT_FOUND_ROUTE_ID, NOT_FOUND_ROUTE_PATH, OAUTH_PROTECTED_RESOURCE_WELL_KNOWN, PRACHT_GRAPH_ONLY_ENV, PREFETCH_ATTRIBUTE, PRESERVE_SCROLL_ATTRIBUTE, ROUTE_STATE_CACHE_CONTROL, ROUTE_STATE_REQUEST_HEADER, SAFE_METHODS, SPECULATE_ATTRIBUTE, VIEW_TRANSITION_ATTRIBUTE };

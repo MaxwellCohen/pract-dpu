@@ -9,6 +9,32 @@ const DEFAULT_DIRECTORY_CACHE_TTL_SECONDS = 300;
 /** Cap on directory response bodies — a JWKS is tiny; anything bigger is hostile. */
 const DIRECTORY_MAX_BYTES = 65536;
 const DIRECTORY_FETCH_TIMEOUT_MS = 5e3;
+const ED25519_PUBLIC_KEY_BYTES = 32;
+const ED25519_JWK_X_RE = /^[A-Za-z0-9_-]{43}$/;
+/**
+* Whether Web Bot Auth has any configured trust source that could resolve an
+* identity. A policy-only block enables verification plumbing but cannot
+* authenticate anyone: static keys need valid Ed25519 JWK material, and
+* directory discovery only ever fetches from HTTPS origins.
+*/
+function hasWebBotAuthIdentitySource(config) {
+	if (config?.keys?.some(hasUsableStaticAgentKey)) return true;
+	return config?.directories?.some((directory) => {
+		try {
+			return new URL(directory).protocol === "https:";
+		} catch {
+			return false;
+		}
+	}) ?? false;
+}
+function hasUsableStaticAgentKey(key) {
+	if (typeof key.x !== "string" || !ED25519_JWK_X_RE.test(key.x)) return false;
+	try {
+		return base64UrlDecode(key.x).byteLength === ED25519_PUBLIC_KEY_BYTES;
+	} catch {
+		return false;
+	}
+}
 /** Split a dictionary header on top-level commas (quotes and inner lists respected). */
 function splitDictionaryMembers(value) {
 	const members = [];
@@ -368,4 +394,4 @@ function normalizeOrigin(value) {
 	}
 }
 //#endregion
-export { ed25519JwkThumbprint, verifyAgentSignature };
+export { ed25519JwkThumbprint, hasWebBotAuthIdentitySource, verifyAgentSignature };

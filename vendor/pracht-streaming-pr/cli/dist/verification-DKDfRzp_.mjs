@@ -1,14 +1,14 @@
 import { a as formatBytes } from "./bundle-report-lW_Uk3V5.mjs";
+import { a as readGraphSnapshotFromDisk, l as resolveLiveGraphMetadata, t as GRAPH_SNAPSHOT_PATH, u as serializeGraphSnapshot } from "./graph-snapshot-C3nG4UBK.mjs";
 import { a as readProjectConfig, c as resolveProjectPath, i as listFilesRecursively, n as displayPath, r as hasPagesAppShell } from "./project-C-2I9C0N.mjs";
 import { a as isRouteSource, c as normalizeRoutePath, i as isPageSource, l as resolveApiRoutePath, n as MODULE_SOURCE_RE, o as isWithinDirectory, r as createCheck, s as normalizePath, t as CONFIG_FILE_NAMES, u as toModuleSpecifier } from "./verification-helpers-D_Az_Kqg.mjs";
 import { n as extractRegistryEntries, r as extractRelativeModulePaths } from "./manifest-D4EPJS5G.mjs";
-import { a as readWranglerBundleSettings, i as readWranglerAssetsHtmlHandling, o as readWranglerMainEntries, r as findWranglerConfig, t as detectAdapterTarget } from "./preview-W12fgmcs.mjs";
-import { a as readGraphSnapshotFromDisk, l as resolveLiveGraphMetadata, t as GRAPH_SNAPSHOT_PATH, u as serializeGraphSnapshot } from "./graph-snapshot-NZsnRhiN.mjs";
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { basename, dirname, join, relative, resolve } from "node:path";
-import { evaluateConstraints } from "@pracht/core";
-import { evaluateLiteral, extractCapabilityRegistrations, extractDefineCapabilityArgs, maskCommentsAndStrings, scanTopLevelProperties } from "@pracht/capabilities/static";
-import { MCP_SCHEMA_ROOT_ERROR, MCP_TOOL_NAME_ERROR, collectInvalidSchemaKeywordValues, collectUnsupportedSchemaKeywords, findMcpToolNameCollisions, isValidCapabilityHttpPath, isValidMcpToolName, mcpToolName } from "@pracht/capabilities";
+import { a as readWranglerBundleSettings, i as readWranglerAssetsHtmlHandling, o as readWranglerMainEntries, r as findWranglerConfig, t as detectAdapterTarget } from "./preview-DoGo6ljG.mjs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { OAUTH_PROTECTED_RESOURCE_WELL_KNOWN, evaluateConstraints, isValidOAuthScopeToken, matchRoutePath } from "@pracht/core";
+import { evaluateLiteral, extractCapabilityRegistrations, extractDefineAppObjectBody, extractDefineCapabilityArgs, findTopLevelObjectProperty, maskCommentsAndStrings, scanTopLevelProperties, scanTopLevelPropertyEntries } from "@pracht/capabilities/static";
+import { MCP_SCHEMA_ROOT_ERROR, MCP_TOOL_NAME_ERROR, WEBMCP_TOOL_NAME_ERROR, collectInvalidSchemaKeywordValues, collectUnsupportedSchemaKeywords, findMcpToolNameCollisions, isValidCapabilityHttpPath, isValidMcpToolName, isValidWebmcpToolName, mcpToolName } from "@pracht/capabilities";
 import { execFileSync } from "node:child_process";
 //#region src/verification-pages.ts
 function scanPagesDirectory(pagesDir, additionalExtensions = []) {
@@ -606,15 +606,32 @@ const CAPABILITY_EFFECTS = new Set([
 	"destructive"
 ]);
 const AGENT_POLICIES = new Set(["observe", "require"]);
+const MCP_CONFIG_KEYS = new Set([
+	"path",
+	"serverInfo",
+	"instructions",
+	"destructive",
+	"auth"
+]);
+const MCP_AUTH_CONFIG_KEYS = new Set([
+	"resource",
+	"authorizationServers",
+	"scopesSupported",
+	"requiredScopes",
+	"resourceDocumentation",
+	"verify"
+]);
 /**
 * Static verification of registered capabilities (manifest mode only). These
 * checks mirror what `defineCapability()` and the runtime registry enforce,
 * but run without executing application code so `pracht verify` stays fast
 * and safe. Spec security rule 1: exposed capabilities without a full
 * contract (description, input, output, effect) fail verification. Spec rule
-* 3: destructive capabilities may only be exposed over HTTP, and only when
-* the prepare/commit confirmation secret (PRACHT_CONFIRMATION_SECRET) is
-* configured in the environment `pracht verify` runs in.
+* 3: destructive capabilities may only be exposed over HTTP and remote MCP,
+* and only when the prepare/commit confirmation secret
+* (PRACHT_CONFIRMATION_SECRET) is configured in the environment `pracht verify`
+* runs in — MCP additionally needs the `agents.mcp.destructive` opt-in and a
+* registered approval store.
 */
 function collectCapabilityChecks(project, checks) {
 	const manifestPath = resolveProjectPath(project.root, project.appFile);
@@ -624,12 +641,16 @@ function collectCapabilityChecks(project, checks) {
 		name,
 		path: file
 	}));
+	collectMcpAuthChecks(project, manifestPath, manifestSource, checks);
 	if (entries.length === 0) return;
 	const registeredMiddleware = new Set(extractRegistryEntries(manifestSource, "middleware").map((entry) => entry.name));
 	checks.push(createCheck("ok", `Registered ${entries.length} capabilit${entries.length === 1 ? "y" : "ies"}.`));
 	const manifestDir = dirname(manifestPath);
 	const httpExposedNames = [];
 	const mcpExposed = [];
+	const destructiveMcpExposed = [];
+	const projection = readMcpProjectionConfig(manifestSource);
+	const appAgentPolicy = readAppAgentPolicyDefault(manifestSource);
 	for (const entry of entries) {
 		const rootRelative = entry.path.startsWith("/");
 		const filePath = rootRelative ? resolveProjectPath(project.root, entry.path) : resolve(manifestDir, entry.path);
@@ -639,33 +660,361 @@ function collectCapabilityChecks(project, checks) {
 		}
 		const source = readFileSync(filePath, "utf-8");
 		if (hasValidStaticHttpExposure(source)) httpExposedNames.push(entry.name);
-		collectSingleCapabilityChecks(entry.name, entry.path, source, registeredMiddleware, checks, mcpExposed);
+		collectSingleCapabilityChecks(entry.name, entry.path, source, registeredMiddleware, checks, {
+			mcpExposed,
+			destructiveMcpExposed,
+			projection,
+			appAgentPolicy
+		});
 	}
 	collectShadowedNameChecks(httpExposedNames, checks);
-	collectMcpProjectionChecks(mcpExposed, manifestSource, checks);
+	collectMcpProjectionChecks(mcpExposed, projection, checks);
+	collectDestructiveMcpChecks(destructiveMcpExposed, projection, project, checks);
+}
+function readMcpProjectionConfig(manifestSource) {
+	const appBody = extractDefineAppObjectBody(manifestSource);
+	const agentsBody = readInlineObjectBody(appBody ? scanTopLevelProperties(appBody).get("agents") : void 0);
+	if (agentsBody === null) return {
+		configured: false,
+		destructive: false
+	};
+	const mcp = scanTopLevelProperties(agentsBody).get("mcp");
+	if (mcp === void 0) return {
+		configured: false,
+		destructive: false
+	};
+	const mcpBody = readInlineObjectBody(mcp);
+	return {
+		configured: true,
+		destructive: mcpBody !== null && evaluateLiteral(scanTopLevelProperties(mcpBody).get("destructive") ?? "") === true
+	};
+}
+function readInlineObjectBody(value) {
+	if (value === void 0) return null;
+	const trimmed = value.trim();
+	return trimmed.startsWith("{") && trimmed.endsWith("}") ? trimmed.slice(1, -1) : null;
+}
+/**
+* Destructive tools on the MCP surface are the one exposure that needs state:
+* the confirmation token travels to the same agent that will commit with it, so
+* only a durable approval store makes the commit exactly-once.
+*
+* Both checks here are warnings, deliberately. Neither fact is decidable from
+* source: the manifest may assemble `agents` elsewhere, and the store may be
+* registered by a workspace package this scan never reads. The gate that
+* actually holds is the runtime's — the MCP endpoint refuses to serve a
+* destructive tool when the store, the confirmation secret, or a resolvable
+* principal is missing — so a static grep must report, not hard-block.
+*/
+function collectDestructiveMcpChecks(destructiveMcpExposed, projection, project, checks) {
+	if (destructiveMcpExposed.length === 0) return;
+	const names = destructiveMcpExposed.map((name) => JSON.stringify(name)).join(", ");
+	if (!projection.destructive) {
+		if (projection.configured) checks.push(createCheck("warning", `Capabilities ${names} are destructive and set expose.mcp, but the manifest does not set agents.mcp.destructive — the projection filters them out at serve time. Add \`agents: { mcp: { destructive: true } }\` (with an approval store) or drop expose.mcp.`));
+		return;
+	}
+	const scan = scanForApprovalStore(project);
+	if (!scan.found) {
+		checks.push(createCheck("warning", `agents.mcp.destructive is enabled, but no \`setCapabilityApprovalStore(\` call was found in ${scan.searched.join(", ")}. Destructive MCP commits must be exactly-once: register a durable approval store (createSqlApprovalStore from @pracht/core/server) from a server-only module, imported by a server entry or a capability module. The MCP endpoint refuses to serve destructive tools without one. Ignore this if the registration lives outside those directories (a workspace package, say).`));
+		return;
+	}
+	checks.push(createCheck("ok", `Destructive MCP tools (${names}) are opted in and a setCapabilityApprovalStore() call exists in the scanned source. The runtime still verifies that the module loaded and a store is registered before serving them.`));
+}
+/**
+* Conservative source scan for a store registration, over the directories the
+* project actually configures. It ignores comments and literals, but cannot
+* prove the module is imported — only that source contains a call-shaped
+* registration — which is why its absence is a warning and the runtime fails
+* closed regardless.
+*/
+function scanForApprovalStore(project) {
+	const configured = [
+		project.serverDir,
+		project.capabilitiesDir,
+		dirname(project.appFile)
+	];
+	const searched = [...new Set(configured)];
+	for (const dir of searched) {
+		const root = resolveProjectPath(project.root, dir);
+		if (!existsSync(root)) continue;
+		let entries;
+		try {
+			entries = readdirSync(root, { recursive: true });
+		} catch {
+			continue;
+		}
+		for (const entry of entries) {
+			if (!/\.(ts|tsx|js|jsx|mts|mjs)$/.test(entry)) continue;
+			try {
+				const source = maskCommentsAndStrings(readFileSync(resolve(root, entry), "utf-8"));
+				if (/\bsetCapabilityApprovalStore\s*\(/.test(source)) return {
+					found: true,
+					searched
+				};
+			} catch {}
+		}
+	}
+	return {
+		found: false,
+		searched
+	};
 }
 /**
 * Checks that only make sense across the whole graph: MCP tool names have to
 * be unique, and `expose.mcp` does nothing until the app configures
 * `agents.mcp`.
 */
-function collectMcpProjectionChecks(mcpExposed, manifestSource, checks) {
+function collectMcpProjectionChecks(mcpExposed, projection, checks) {
 	if (mcpExposed.length === 0) return;
 	for (const collision of findMcpToolNameCollisions(mcpExposed)) checks.push(createCheck("error", `Capabilities ${collision.capabilities.map((name) => JSON.stringify(name)).join(" and ")} both project to the MCP tool name ${JSON.stringify(collision.toolName)} (dots become underscores). Rename one — the runtime refuses to serve an ambiguous tool list.`));
-	if (!manifestConfiguresMcpProjection(manifestSource)) checks.push(createCheck("warning", `${mcpExposed.length} capabilit${mcpExposed.length === 1 ? "y sets" : "ies set"} expose.mcp, but the manifest does not configure agents.mcp — the exposure is recorded in the graph and nothing serves it. Add \`agents: { mcp: {} }\` to defineApp() to serve them at /mcp.`));
+	if (!projection.configured) checks.push(createCheck("warning", `${mcpExposed.length} capabilit${mcpExposed.length === 1 ? "y sets" : "ies set"} expose.mcp, but the manifest does not configure agents.mcp — the exposure is recorded in the graph and nothing serves it. Add \`agents: { mcp: {} }\` to defineApp() to serve them at /mcp.`));
 }
 /**
-* Conservative source scan for `agents: { … mcp: … }` in the manifest.
+* Static checks for `agents.mcp.auth` — the OAuth resource-server config.
 *
-* Verification is static (no Vite server), so a manifest that builds its
-* `agents` config in a separate variable reads as unconfigured. That only
-* costs one spurious warning, never a failed build — which is why this stays
-* a warning.
+* `resolveApp()` validates the same config at build time and throws, but that
+* requires running the app. These checks read the manifest source, so `pracht
+* verify` reports a broken `/mcp` auth setup without a Vite server. Everything
+* this analyzer cannot read stays silent rather than guessing.
 */
-function manifestConfiguresMcpProjection(manifestSource) {
-	const agentsIndex = manifestSource.search(/\bagents\s*:\s*\{/);
-	if (agentsIndex === -1) return false;
-	return /\bmcp\s*:/.test(manifestSource.slice(agentsIndex));
+function collectMcpAuthChecks(project, manifestPath, manifestSource, checks) {
+	const agentsBody = findTopLevelObjectProperty(manifestSource, "agents");
+	if (!agentsBody) return;
+	if (scanTopLevelProperties(agentsBody).has("auth")) checks.push(createCheck("error", "defineApp({ agents.auth }) is not a thing. OAuth resource-server config belongs to the remote MCP endpoint: move it to `agents: { mcp: { auth: { … } } }`, which is also what enables the endpoint in the first place."));
+	const mcpBody = findTopLevelObjectProperty(agentsBody, "mcp");
+	if (!mcpBody) return;
+	const unknownMcpKeys = collectUnknownKeys(mcpBody, MCP_CONFIG_KEYS);
+	for (const key of unknownMcpKeys) checks.push(createCheck("error", `Unknown agents.mcp option ${JSON.stringify(key)}. Allowed options: ${[...MCP_CONFIG_KEYS].join(", ")}.`));
+	const authBody = findTopLevelObjectProperty(mcpBody, "auth");
+	if (!authBody) return;
+	const authIsPartlyOpaque = /\.\.\./.test(maskCommentsAndStrings(authBody));
+	let authIsProvablyValid = !authIsPartlyOpaque && unknownMcpKeys.length === 0;
+	const properties = scanTopLevelProperties(authBody);
+	for (const key of collectUnknownKeys(authBody, MCP_AUTH_CONFIG_KEYS)) {
+		authIsProvablyValid = false;
+		checks.push(createCheck("error", `Unknown agents.mcp.auth option ${JSON.stringify(key)}. Allowed options: ${[...MCP_AUTH_CONFIG_KEYS].join(", ")}.`));
+	}
+	const resourceExpression = properties.get("resource");
+	const resource = evaluateLiteral(resourceExpression ?? "");
+	if (resourceExpression === void 0 && !authIsPartlyOpaque) {
+		checks.push(createCheck("error", "agents.mcp.auth is configured without a `resource` URL. It must identify the remote MCP endpoint's absolute deployed URL."));
+		authIsProvablyValid = false;
+	} else if (resourceExpression !== void 0 && typeof resource !== "string") authIsProvablyValid = false;
+	if (typeof resource === "string") {
+		let parsed = null;
+		try {
+			parsed = new URL(resource);
+		} catch {
+			parsed = null;
+		}
+		if (!parsed) {
+			authIsProvablyValid = false;
+			checks.push(createCheck("error", `agents.mcp.auth.resource ${JSON.stringify(resource)} is not an absolute URL. It is the token audience and the base for the metadata URL hosts discover, so it must be the endpoint's absolute https URL.`));
+		} else if (!oauthUrlUsesSafeTransport(parsed)) {
+			authIsProvablyValid = false;
+			checks.push(createCheck("error", `agents.mcp.auth.resource ${JSON.stringify(resource)} must use https (http is allowed for loopback development only).`));
+		} else if (parsed.search || parsed.hash) {
+			authIsProvablyValid = false;
+			checks.push(createCheck("error", `agents.mcp.auth.resource ${JSON.stringify(resource)} must not carry a query string or fragment.`));
+		} else if (!oauthUrlHasCanonicalSpelling(resource, parsed, true)) {
+			authIsProvablyValid = false;
+			checks.push(createCheck("error", `agents.mcp.auth.resource ${JSON.stringify(resource)} must use its canonical URL spelling ${JSON.stringify(parsed.href)} because OAuth identifiers are matched exactly.`));
+		} else if (parsed.pathname.length > 1 && parsed.pathname.endsWith("/")) {
+			authIsProvablyValid = false;
+			checks.push(createCheck("error", `agents.mcp.auth.resource ${JSON.stringify(resource)} must not carry a trailing slash. OAuth resource identifiers are matched exactly; use the MCP endpoint's canonical path.`));
+		} else {
+			const mcpProperties = scanTopLevelProperties(mcpBody);
+			const configuredPath = evaluateLiteral(mcpProperties.get("path") ?? "");
+			if (mcpProperties.has("path") && typeof configuredPath !== "string") authIsProvablyValid = false;
+			else if (typeof configuredPath === "string" && !isValidCapabilityHttpPath(configuredPath)) {
+				authIsProvablyValid = false;
+				checks.push(createCheck("error", "agents.mcp.path must be an exact same-origin pathname starting with \"/\"."));
+			} else {
+				const endpoint = (configuredPath ?? "/mcp").replace(/\/$/, "") || "/";
+				if (endpoint === OAUTH_PROTECTED_RESOURCE_WELL_KNOWN) {
+					authIsProvablyValid = false;
+					checks.push(createCheck("error", `agents.mcp.path must not use the reserved OAuth protected-resource metadata path ${JSON.stringify(OAUTH_PROTECTED_RESOURCE_WELL_KNOWN)}.`));
+				} else if (endpoint !== "/" && parsed.pathname !== endpoint) {
+					authIsProvablyValid = false;
+					if (!parsed.pathname.endsWith(endpoint)) checks.push(createCheck("error", `agents.mcp.auth.resource path ${JSON.stringify(parsed.pathname)} does not address the configured MCP endpoint ${JSON.stringify(endpoint)}.`));
+				}
+			}
+		}
+	}
+	const authorizationServersExpression = properties.get("authorizationServers");
+	const authorizationServers = evaluateLiteral(authorizationServersExpression ?? "");
+	if (authorizationServersExpression === void 0) {
+		authIsProvablyValid = false;
+		if (!authIsPartlyOpaque) checks.push(createCheck("error", "agents.mcp.auth.authorizationServers must list at least one absolute authorization server issuer URL."));
+	} else if (authorizationServersExpression !== void 0 && authorizationServers === void 0) authIsProvablyValid = false;
+	else if (!Array.isArray(authorizationServers) || authorizationServers.length === 0) {
+		authIsProvablyValid = false;
+		checks.push(createCheck("error", "agents.mcp.auth.authorizationServers must list at least one absolute authorization server issuer URL."));
+	} else for (const issuer of authorizationServers) {
+		let parsed = null;
+		if (typeof issuer === "string") try {
+			parsed = new URL(issuer);
+		} catch {
+			parsed = null;
+		}
+		if (!parsed) {
+			authIsProvablyValid = false;
+			checks.push(createCheck("error", `agents.mcp.auth.authorizationServers contains a non-absolute issuer URL: ${JSON.stringify(issuer)}.`));
+		} else if (!oauthUrlUsesSafeTransport(parsed)) {
+			authIsProvablyValid = false;
+			checks.push(createCheck("error", `agents.mcp.auth.authorizationServers issuer ${JSON.stringify(issuer)} must use https (http is allowed for loopback development only).`));
+		} else if (parsed.search || parsed.hash) {
+			authIsProvablyValid = false;
+			checks.push(createCheck("error", `agents.mcp.auth.authorizationServers issuer ${JSON.stringify(issuer)} must not carry a query string or fragment.`));
+		} else if (!oauthUrlHasCanonicalSpelling(issuer, parsed, true)) {
+			authIsProvablyValid = false;
+			checks.push(createCheck("error", `agents.mcp.auth.authorizationServers issuer ${JSON.stringify(issuer)} must use its canonical URL spelling ${JSON.stringify(parsed.href)} because OAuth identifiers are matched exactly.`));
+		}
+	}
+	const resourceDocumentationExpression = properties.get("resourceDocumentation");
+	if (resourceDocumentationExpression !== void 0) {
+		const resourceDocumentation = evaluateLiteral(resourceDocumentationExpression);
+		if (typeof resourceDocumentation !== "string") authIsProvablyValid = false;
+		else {
+			let parsed = null;
+			try {
+				parsed = new URL(resourceDocumentation);
+			} catch {
+				parsed = null;
+			}
+			if (!parsed) {
+				authIsProvablyValid = false;
+				checks.push(createCheck("error", `agents.mcp.auth.resourceDocumentation ${JSON.stringify(resourceDocumentation)} is not an absolute URL.`));
+			} else if (!oauthUrlUsesSafeTransport(parsed)) {
+				authIsProvablyValid = false;
+				checks.push(createCheck("error", `agents.mcp.auth.resourceDocumentation ${JSON.stringify(resourceDocumentation)} must use https (http is allowed for loopback development only).`));
+			}
+		}
+	}
+	for (const field of ["scopesSupported", "requiredScopes"]) {
+		const expression = properties.get(field);
+		if (expression === void 0) continue;
+		const scopes = evaluateLiteral(expression);
+		if (scopes === void 0) authIsProvablyValid = false;
+		else if (!Array.isArray(scopes) || scopes.some((scope) => !isValidOAuthScopeToken(scope))) {
+			authIsProvablyValid = false;
+			checks.push(createCheck("error", `agents.mcp.auth.${field} must be an array of OAuth scope tokens using printable ASCII except quotes and backslashes.`));
+		}
+	}
+	const verifyExpression = findProvableTopLevelProperty(authBody, "verify");
+	if (verifyExpression === void 0) {
+		if (!authIsPartlyOpaque) checks.push(createCheck("error", "agents.mcp.auth is configured without a `verify` module. The endpoint would advertise authentication it never performs — add `verify: () => import(\"./server/mcp-token.ts\")` whose default export verifies a bearer token."));
+		return;
+	}
+	const verifyPath = extractMcpVerifyModulePath(verifyExpression);
+	if (!verifyPath) {
+		checks.push(createCheck("error", "agents.mcp.auth.verify must be a module reference such as `verify: () => import(\"./server/mcp-token.ts\")`."));
+		return;
+	}
+	const filePath = verifyPath.startsWith("/") ? resolveProjectPath(project.root, verifyPath) : resolve(dirname(manifestPath), verifyPath);
+	if (!existsSync(filePath)) {
+		checks.push(createCheck("error", `agents.mcp.auth.verify references missing file ${JSON.stringify(verifyPath)}.`));
+		return;
+	}
+	if (!statSync(filePath).isFile()) {
+		checks.push(createCheck("error", `agents.mcp.auth.verify references ${JSON.stringify(verifyPath)}, which is not a file.`));
+		return;
+	}
+	const registryDirs = [
+		project.serverDir,
+		project.middlewareDir,
+		project.capabilitiesDir
+	];
+	if (!registryDirs.some((dir) => isInsideDirectory(project.root, dir, filePath))) {
+		checks.push(createCheck("error", `agents.mcp.auth.verify module ${JSON.stringify(verifyPath)} is outside the directories the build registers (${registryDirs.join(", ")}), so the runtime can never load it and every /mcp request would answer 401. Move it to ${project.serverDir}/.`));
+		return;
+	}
+	const verifierExport = inspectDefaultFunctionExport(readFileSync(filePath, "utf-8"));
+	if (verifierExport === "invalid") {
+		checks.push(createCheck("error", `agents.mcp.auth.verify module ${JSON.stringify(verifyPath)} must default-export a token verifier function.`));
+		return;
+	}
+	if (verifierExport === "unknown") {
+		authIsProvablyValid = false;
+		checks.push(createCheck("warning", `Could not prove that agents.mcp.auth.verify module ${JSON.stringify(verifyPath)} default-exports a function. Use a direct \`export default function\` or \`export default (...) => ...\` declaration so verification can confirm the endpoint will load it.`));
+	}
+	if (authIsProvablyValid) checks.push(createCheck("ok", "Remote MCP endpoint is an OAuth 2.0 protected resource (RFC 9728)."));
+}
+function collectUnknownKeys(body, allowed) {
+	return [...scanTopLevelProperties(body).keys()].filter((key) => !allowed.has(key));
+}
+/** Prove the runtime's `module.default` callable contract without executing user code. */
+function inspectDefaultFunctionExport(source) {
+	const masked = maskCommentsAndStrings(source);
+	if (/\bexport\s+default\s+(?:async\s+)?function\b/.test(masked)) return "valid";
+	if (/\bexport\s+default\s+(?:async\s+)?(?:\([^;{}]*\)|[A-Za-z_$][\w$]*)\s*=>/.test(masked)) return "valid";
+	const identifier = /\bexport\s+default\s+([A-Za-z_$][\w$]*)\s*;?/.exec(masked)?.[1];
+	if (identifier) {
+		const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		if (new RegExp(`\\b(?:async\\s+)?function\\s+${escaped}\\b`).test(masked)) return "valid";
+		if (new RegExp(`\\b(?:const|let|var)\\s+${escaped}(?:\\s*:[^=;]+)?\\s*=\\s*(?:async\\s+)?(?:function\\b|(?:\\([^;{}]*\\)|[A-Za-z_$][\\w$]*)\\s*=>)`).test(masked)) return "valid";
+		const initializer = new RegExp(`\\b(?:const|let|var)\\s+${escaped}(?:\\s*:[^=;]+)?\\s*=\\s*([^;]+)`).exec(masked)?.[1];
+		if (initializer !== void 0 && isProvablyNonFunctionInitializer(initializer)) return "invalid";
+		return "unknown";
+	}
+	if (/\bexport\s*\{[^}]*\bdefault\b[^}]*\}/.test(masked)) return "unknown";
+	return "invalid";
+}
+function isProvablyNonFunctionInitializer(initializer) {
+	const value = initializer.trim();
+	return value.startsWith("{") || value.startsWith("[") || /^(?:null|true|false|[-+]?\d|["'`])/.test(value);
+}
+/** A statically provable ModuleRef shape that the manifest transform supports. */
+function extractMcpVerifyModulePath(expression) {
+	const literal = evaluateLiteral(expression);
+	if (typeof literal === "string" && literal !== "") return literal;
+	return /^\s*\(\)\s*=>\s*import\(\s*(["'])([^"']+)\1\s*\)\s*$/.exec(expression)?.[2] ?? null;
+}
+/**
+* Read an explicit top-level property even when an earlier spread truncated the
+* shared scanner. A later spread resets the proof because it may override the
+* value; a later explicit property makes the value knowable again.
+*/
+function findProvableTopLevelProperty(objectBody, key) {
+	const searchable = maskCommentsAndStrings(objectBody);
+	const entries = [];
+	let depth = 0;
+	let start = 0;
+	for (let index = 0; index <= searchable.length; index += 1) {
+		const character = searchable[index];
+		if (character === "{" || character === "[" || character === "(") depth += 1;
+		else if (character === "}" || character === "]" || character === ")") depth -= 1;
+		if (character === "," && depth === 0 || index === searchable.length) {
+			entries.push(objectBody.slice(start, index));
+			start = index + 1;
+		}
+	}
+	let expression;
+	for (const entry of entries) {
+		if (maskCommentsAndStrings(entry).trimStart().startsWith("...")) {
+			expression = void 0;
+			continue;
+		}
+		const candidate = scanTopLevelProperties(entry).get(key);
+		if (candidate !== void 0) expression = candidate;
+	}
+	return expression;
+}
+function oauthUrlUsesSafeTransport(url) {
+	return url.protocol === "https:" || url.protocol === "http:" && isLoopbackHost(url.hostname);
+}
+function oauthUrlHasCanonicalSpelling(value, url, allowRootWithoutSlash) {
+	return url.href === value || allowRootWithoutSlash && url.pathname === "/" && url.search === "" && url.hash === "" && url.href === `${value}/`;
+}
+function isLoopbackHost(hostname) {
+	if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname === "[::1]") return true;
+	const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(hostname);
+	return !!ipv4 && Number(ipv4[1]) === 127 && ipv4.slice(1).every((part) => Number(part) <= 255);
+}
+/** Whether an absolute file path sits inside a project-relative directory. */
+function isInsideDirectory(root, dir, filePath) {
+	const relative$1 = relative(resolveProjectPath(root, dir), filePath);
+	return relative$1 !== "" && !relative$1.startsWith("..") && !isAbsolute(relative$1);
 }
 /**
 * The generated browser client turns dotted names into nested objects, so
@@ -692,14 +1041,15 @@ function hasValidStaticHttpExposure(source) {
 	const exposeFlags = readExposeFlags(scanTopLevelProperties(args).get("expose"));
 	return exposeFlags.hasHttp && !exposeFlags.unknown && exposeFlags.problems.length === 0;
 }
-function collectSingleCapabilityChecks(name, displayPath, source, registeredMiddleware, checks, mcpExposed) {
+function collectSingleCapabilityChecks(name, displayPath, source, registeredMiddleware, checks, graph) {
+	const { mcpExposed, destructiveMcpExposed, projection, appAgentPolicy } = graph;
 	const label = `Capability ${JSON.stringify(name)} (${displayPath})`;
 	const args = extractDefineCapabilityArgs(source);
 	if (!args) {
 		checks.push(createCheck("error", `${label} does not contain a statically analyzable defineCapability({ ... }) call.`));
 		return;
 	}
-	const properties = scanTopLevelProperties(args);
+	const { properties, truncated } = scanTopLevelPropertyEntries(args);
 	const title = readStaticString(properties.get("title"));
 	const description = readStaticString(properties.get("description"));
 	const effect = readStaticString(properties.get("effect"));
@@ -741,9 +1091,15 @@ function collectSingleCapabilityChecks(name, displayPath, source, registeredMidd
 			if (!isValidMcpToolName(mcpToolName(name))) problems.push(MCP_TOOL_NAME_ERROR);
 		}
 		if (hasWebmcp && !hasHttp) problems.push("sets expose.webmcp without expose.http — WebMCP tools dispatch through the HTTP projection");
+		if (hasWebmcp) {
+			if (!isValidWebmcpToolName(name)) problems.push(WEBMCP_TOOL_NAME_ERROR);
+			if ((agentPolicy.kind === "valid" ? agentPolicy.value : agentPolicy.kind === "absent" && !truncated ? appAgentPolicy : void 0) === "require") checks.push(createCheck("warning", `${label} is exposed as a WebMCP page tool under agentPolicy "require"${agentPolicy.kind === "absent" ? " (inherited from agents.webBotAuth.policy)" : ""}. WebMCP calls are unsigned browser fetches, so every call from the page tool will be rejected with a 401. Override with agentPolicy: "observe" on the capability, or drop expose.webmcp.`));
+			collectWebmcpBudgetChecks(label, description, properties.get("input"), checks);
+		}
 		if (effectValue === "destructive") {
-			if (hasWebmcp || hasMcp) problems.push("is destructive and exposed to agent projections (webmcp/mcp) — only expose.http is allowed, gated by the prepare/commit confirmation flow");
-			else if (hasHttp && !process.env.PRACHT_CONFIRMATION_SECRET) problems.push("is destructive and exposed over HTTP without PRACHT_CONFIRMATION_SECRET in the environment — the prepare/commit confirmation flow needs the secret and the runtime fails closed without it. Verification reads the real environment, not `.env`: `pracht dev` loads that file, but a deployed server takes its environment from the platform, so set a real variable (or a Cloudflare secret / Vercel environment variable) there");
+			if (hasMcp) destructiveMcpExposed.push(name);
+			if (hasWebmcp) problems.push("is destructive and exposed as a WebMCP page tool — a browser host's approval UX is not a security boundary. Use expose.http, or expose.mcp with agents.mcp.destructive, both gated by the prepare/commit confirmation flow");
+			else if ((hasHttp || hasMcp && projection.destructive) && !process.env.PRACHT_CONFIRMATION_SECRET) problems.push("is destructive and exposed without PRACHT_CONFIRMATION_SECRET in the environment — the prepare/commit confirmation flow needs the secret and the runtime fails closed without it. Verification reads the real environment, not `.env`: `pracht dev` loads that file, but a deployed server takes its environment from the platform, so set a real variable (or a Cloudflare secret / Vercel environment variable) there");
 		}
 	}
 	const invalidMcpSchemaRoots = [];
@@ -768,6 +1124,61 @@ function collectSingleCapabilityChecks(name, displayPath, source, registeredMidd
 	}
 	if (exposeFlags.unknown) return;
 	checks.push(createCheck("ok", `${label} declares a complete ${exposed ? "exposed" : "private"} contract${effectValue ? ` (effect: ${effectValue})` : ""}.`));
+}
+/**
+* Chrome's published WebMCP authoring budgets: agents read tool metadata on
+* every page, so oversized prose degrades tool selection long before any hard
+* limit. Advisory — warnings, not errors.
+*/
+const WEBMCP_DESCRIPTION_BUDGET = 500;
+const WEBMCP_PARAM_DESCRIPTION_BUDGET = 150;
+function collectWebmcpBudgetChecks(label, description, inputText, checks) {
+	if (description.kind === "valid" && description.value.length > WEBMCP_DESCRIPTION_BUDGET) checks.push(createCheck("warning", `${label} is exposed as a WebMCP page tool with a ${description.value.length}-character description — in-browser agents work best under ~${WEBMCP_DESCRIPTION_BUDGET} characters.`));
+	const schema = inputText ? evaluateLiteral(inputText) : void 0;
+	if (!schema || typeof schema !== "object") return;
+	for (const [path, text] of collectSchemaDescriptions(schema, "")) if (text.length > WEBMCP_PARAM_DESCRIPTION_BUDGET) checks.push(createCheck("warning", `${label} is exposed as a WebMCP page tool and its input schema description at ${JSON.stringify(path)} is ${text.length} characters — in-browser agents work best under ~${WEBMCP_PARAM_DESCRIPTION_BUDGET} characters per parameter.`));
+}
+/** Every `description` string in a JSON Schema subtree, except the root's (that is the tool description's job). */
+function collectSchemaDescriptions(schema, path) {
+	const found = [];
+	if (path !== "" && typeof schema.description === "string") found.push([path, schema.description]);
+	const properties = schema.properties;
+	if (properties && typeof properties === "object" && !Array.isArray(properties)) {
+		for (const [key, value] of Object.entries(properties)) if (value && typeof value === "object" && !Array.isArray(value)) found.push(...collectSchemaDescriptions(value, path === "" ? key : `${path}.${key}`));
+	}
+	const items = schema.items;
+	if (items && typeof items === "object" && !Array.isArray(items)) found.push(...collectSchemaDescriptions(items, path === "" ? "[]" : `${path}[]`));
+	return found;
+}
+function readAppAgentPolicyDefault(manifestSource) {
+	const appBody = extractDefineAppObjectBody(manifestSource);
+	if (appBody === null) return void 0;
+	const agentsText = readScannedProperty(appBody, "agents");
+	if (agentsText === null) return null;
+	if (agentsText === void 0) return void 0;
+	const agentsBody = readInlineObjectBody(agentsText);
+	if (agentsBody === null) return void 0;
+	const webBotAuthText = readScannedProperty(agentsBody, "webBotAuth");
+	if (webBotAuthText === null) return null;
+	if (webBotAuthText === void 0) return void 0;
+	const webBotAuthBody = readInlineObjectBody(webBotAuthText);
+	if (webBotAuthBody === null) return void 0;
+	const policyText = readScannedProperty(webBotAuthBody, "policy");
+	if (policyText === null) return null;
+	if (policyText === void 0) return void 0;
+	const value = evaluateLiteral(policyText);
+	return typeof value === "string" ? value : void 0;
+}
+/**
+* One property from a scanned object body: its text when present, `null` when
+* provably absent, `undefined` when the scan was truncated before it could
+* decide (a spread or computed key hides everything after it).
+*/
+function readScannedProperty(objectBody, key) {
+	const { properties, truncated } = scanTopLevelPropertyEntries(objectBody);
+	const text = properties.get(key);
+	if (text !== void 0) return text;
+	return truncated ? void 0 : null;
 }
 function readStaticString(text) {
 	if (!text) return { kind: "absent" };
@@ -822,10 +1233,17 @@ function readExposeFlags(text) {
 		if (http.method !== void 0 && http.method !== "POST") problems.push("HTTP exposure only supports method: \"POST\"");
 		if (http.path !== void 0 && !isValidCapabilityHttpPath(http.path)) problems.push("HTTP exposure \"path\" must be an exact same-origin pathname starting with \"/\"");
 	} else if (expose.http !== void 0 && expose.http !== false && expose.http !== null) problems.push("\"expose.http\" must be true or an object");
+	let hasWebmcp = false;
+	if (expose.webmcp === true) hasWebmcp = true;
+	else if (expose.webmcp && typeof expose.webmcp === "object" && !Array.isArray(expose.webmcp)) {
+		hasWebmcp = true;
+		const webmcp = expose.webmcp;
+		if (webmcp.untrustedContent !== void 0 && typeof webmcp.untrustedContent !== "boolean") problems.push("WebMCP exposure \"untrustedContent\" must be a boolean");
+	} else if (expose.webmcp !== void 0 && expose.webmcp !== false && expose.webmcp !== null) problems.push("\"expose.webmcp\" must be true or an options object");
 	return {
 		hasHttp,
 		hasMcp: expose.mcp === true,
-		hasWebmcp: expose.webmcp === true,
+		hasWebmcp,
 		unknown: false,
 		problems
 	};
@@ -1151,6 +1569,10 @@ function collectStaticExportChecks(graph, checks, options) {
 		problems += 1;
 		checks.push(createCheck("error", `Static export: these capabilities are exposed over the network, but a static export has no server to serve them: ${list(exposedCapabilities.map((capability) => `${capability.name} (${capability.transports.join(", ")})`))}. Server-only capabilities invoked from build-time loaders are fine.`));
 	}
+	if (graph.mcpEndpoint) {
+		problems += 1;
+		checks.push(createCheck("error", `Static export: the remote MCP endpoint ${graph.mcpEndpoint} needs a server to answer requests, but a static export has none. Remove agents.mcp or use a serverful adapter.`));
+	}
 	if (problems === 0) checks.push(createCheck("ok", "Static export preconditions hold (no request-runtime features in use)."));
 }
 //#endregion
@@ -1165,10 +1587,11 @@ const HEAD_EXPORT_RE = /export\s+(?:async\s+)?(?:function|const|let|var)\s+head\
 async function collectGraphChecks(project, checks) {
 	const wantsConstraints = manifestDeclaresConstraints(project);
 	const wantsCapabilityLoad = manifestDeclaresCapabilities(project);
+	const wantsAgentValidation = manifestDeclaresAgents(project);
 	const wantsApiLoad = projectDeclaresApiRoutes(project);
 	const snapshotExists = existsSync(resolve(project.root, GRAPH_SNAPSHOT_PATH));
 	const mightUseStaticExport = projectMightUseStaticExport(project);
-	if (!wantsConstraints && !wantsCapabilityLoad && !wantsApiLoad && !snapshotExists && !mightUseStaticExport) return;
+	if (!wantsConstraints && !wantsCapabilityLoad && !wantsAgentValidation && !wantsApiLoad && !snapshotExists && !mightUseStaticExport) return;
 	let live;
 	let staticTarget = false;
 	let loaderRoutePaths = /* @__PURE__ */ new Set();
@@ -1182,15 +1605,26 @@ async function collectGraphChecks(project, checks) {
 		checks.push(createCheck("error", `Could not resolve the app graph for live verification checks: ${message}`));
 		return;
 	}
-	if (!wantsConstraints && !wantsCapabilityLoad && !wantsApiLoad && !snapshotExists && !staticTarget) return;
+	if (!wantsConstraints && !wantsCapabilityLoad && !wantsAgentValidation && !wantsApiLoad && !snapshotExists && !staticTarget) return;
 	if (wantsCapabilityLoad) checks.push(createCheck("ok", `Loaded ${live.capabilities.length} registered capability module${live.capabilities.length === 1 ? "" : "s"} into the app graph.`));
 	if (wantsApiLoad) checks.push(createCheck("ok", `Loaded ${live.api.length} discovered API route module${live.api.length === 1 ? "" : "s"} into the app graph.`));
+	collectMcpRouteCollisionChecks(live, checks);
 	collectStaticExportChecks(live, checks, {
 		loaderRoutePaths,
 		staticTarget
 	});
 	collectConstraintChecks(project, live, checks);
 	collectSnapshotChecks(project, live, checks, snapshotExists);
+}
+/** Explicit API dispatch must not shadow the remote MCP security boundary. */
+function collectMcpRouteCollisionChecks(live, checks) {
+	if (live.mcpEndpoint === null) return;
+	const endpoint = normalizeEndpointPath(live.mcpEndpoint);
+	const collisions = live.api.filter((route) => matchRoutePath(normalizeEndpointPath(route.path), endpoint) !== null);
+	for (const route of collisions) checks.push(createCheck("error", `API route ${JSON.stringify(route.path)} collides with agents.mcp.path. Move one of them; an API route must not shadow the remote MCP endpoint's transport and authentication gates.`));
+}
+function normalizeEndpointPath(path) {
+	return path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
 }
 function projectMightUseStaticExport(project) {
 	const detectedTarget = detectAdapterTarget(project);
@@ -1280,6 +1714,13 @@ function manifestDeclaresCapabilities(project) {
 	if (!existsSync(manifestPath)) return false;
 	const source = readFileSync(manifestPath, "utf-8");
 	return extractCapabilityRegistrations(source).length > 0 || /\bcapabilities\s*:/.test(source);
+}
+function manifestDeclaresAgents(project) {
+	if (project.mode !== "manifest") return false;
+	const manifestPath = resolveProjectPath(project.root, project.appFile);
+	if (!existsSync(manifestPath)) return false;
+	const appBody = extractDefineAppObjectBody(readFileSync(manifestPath, "utf-8"));
+	return appBody !== null && (scanTopLevelProperties(appBody).has("agents") || /\bagents\b/.test(maskCommentsAndStrings(appBody)));
 }
 /**
 * Whether the route module (or its shell) exports `head()`. Returns undefined

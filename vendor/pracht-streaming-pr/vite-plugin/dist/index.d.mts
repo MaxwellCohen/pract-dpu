@@ -313,10 +313,12 @@ interface ExtractedCapability {
   name: string;
   /** Manifest-relative module path, e.g. "./capabilities/notes-search.ts". */
   file: string;
+  title: string;
   description: string;
   effect: string | null;
   httpPath: string | null;
   webmcp: boolean;
+  webmcpUntrustedContent: boolean;
   inputSchema: Record<string, unknown> | null;
 }
 /**
@@ -345,9 +347,17 @@ declare function createPrachtCapabilitiesClientModuleSource(options?: PrachtPlug
  * validation/middleware/policy stays server-side. Each dispatch carries the
  * transport marker header so audit events can attribute it to WebMCP.
  *
- * Targets the Chrome origin-trial API: `document.modelContext.registerTool()`
- * (Chrome 150+; `navigator.modelContext` is the deprecated pre-150 location
- * and is kept as a fallback). No-ops silently when the API is absent.
+ * Targets the WebMCP CG draft API: `document.modelContext.registerTool()`
+ * (ChatGPT desktop's built-in browser; Chromium 150+ within the 149–156
+ * origin trial — the `document` getter landed in 150 and the deprecated
+ * `navigator.modelContext` alias was removed in 152, so trial builds before
+ * 150 are not targeted and no fallback is kept; current polyfills install the
+ * `document` shape). No-ops silently when the API is absent.
+ *
+ * `execute()` returns the capability envelope (`{ ok, data }` /
+ * `{ ok: false, error }`) as a plain object: per the spec the host serializes
+ * the returned value itself, so wrapping it in MCP-style content blocks would
+ * reach the agent double-encoded.
  */
 declare function createPrachtWebmcpModuleSource(options?: PrachtPluginOptions, buildOptions?: {
   root?: string;

@@ -8,7 +8,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync,
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "vite";
-import { matchRoutePath, routePathIsDynamic } from "@pracht/core";
+import { OAUTH_PROTECTED_RESOURCE_WELL_KNOWN, matchRoutePath, mcpResourceMetadataPath, resolveMcpEndpoint, routePathIsDynamic } from "@pracht/core";
 import { randomBytes } from "node:crypto";
 import { buildStaticRouteStateUrl, getTimeRevalidateSeconds } from "@pracht/core/server";
 //#region src/build-shared.ts
@@ -35,7 +35,14 @@ module.exports = async (req, res) => {
   return listener(req, res);
 };
 `;
-function writeVercelBuildOutput({ base = "/", functionName, headersManifest = {}, isgManifest, markdownRoutes = [], revalidateToken = process.env.PRACHT_REVALIDATE_TOKEN || randomBytes(32).toString("hex"), regions, root, staticAssetRoutes = [], staticRoutes }) {
+/** Runtime-owned agent paths that must win over Vercel's method-agnostic static rewrites. */
+function resolveVercelRuntimeRoutes(agents) {
+	const endpoint = resolveMcpEndpoint(agents);
+	if (endpoint === null) return [];
+	const auth = agents?.mcp?.auth;
+	return [endpoint, ...auth ? [OAUTH_PROTECTED_RESOURCE_WELL_KNOWN, mcpResourceMetadataPath(auth)] : []];
+}
+function writeVercelBuildOutput({ base = "/", functionName, headersManifest = {}, isgManifest, markdownRoutes = [], revalidateToken = process.env.PRACHT_REVALIDATE_TOKEN || randomBytes(32).toString("hex"), regions, root, runtimeRoutes = [], staticAssetRoutes = [], staticRoutes }) {
 	const deployBase = resolveVercelDeployBase(base);
 	const outputDir = join(root, ".vercel/output");
 	const staticDeployDir = resolveVercelStaticDeployDir(join(outputDir, "static"), deployBase);
@@ -71,6 +78,7 @@ function writeVercelBuildOutput({ base = "/", functionName, headersManifest = {}
 		functionName,
 		headersManifest,
 		markdownRoutes,
+		runtimeRoutes,
 		staticAssetRoutes,
 		staticRoutes,
 		isgRoutes: Object.keys(isgManifest),
@@ -144,7 +152,7 @@ function linkVercelPrerenderFunction({ routeFunctionDir, sharedNodeFunctionDir }
 	}
 }
 const ACCEPT_MARKDOWN_PATTERN = ".*[tT][eE][xX][tT]/[mM][aA][rR][kK][dD][oO][wW][nN].*";
-function createVercelOutputConfig({ deployBase, functionName, headersManifest, markdownRoutes, staticAssetRoutes, staticRoutes, isgRoutes }) {
+function createVercelOutputConfig({ deployBase, functionName, headersManifest, markdownRoutes, runtimeRoutes, staticAssetRoutes, staticRoutes, isgRoutes }) {
 	const target = `/${functionName || "render"}`;
 	const routes = [
 		{
@@ -180,6 +188,11 @@ function createVercelOutputConfig({ deployBase, functionName, headersManifest, m
 		dest: target,
 		methods: ["GET", "HEAD"],
 		src: `^${escapeRegex(deployBase.slice(0, -1))}$`
+	});
+	const publicRuntimeRoutes = deployBase === "/" ? runtimeRoutes : [...runtimeRoutes, ...runtimeRoutes.map((route) => withVercelDeployBase(route, deployBase))];
+	for (const route of sortStaticRoutes(publicRuntimeRoutes)) routes.push({
+		dest: target,
+		src: routeToRouteExpression(route)
 	});
 	const staticAssetRouteSet = new Set(staticAssetRoutes);
 	for (const route of sortStaticRoutes([...staticRoutes, ...staticAssetRoutes])) {
@@ -465,6 +478,11 @@ async function validateStaticExport(serverMod) {
 	}
 	if (invalidCapabilities.length > 0) problems.push(`these registered capabilities could not be loaded, so their network exposure cannot be validated safely:\n` + invalidCapabilities.join("\n"));
 	if (exposedCapabilities.length > 0) problems.push(`these capabilities are exposed over the network (HTTP/MCP/WebMCP), which needs a server:\n` + exposedCapabilities.join("\n") + `\n  Drop their \`expose\` config (server-side invokeCapability from build-time loaders still works), or ${SERVERFUL_ADAPTER_HINT}`);
+	const mcp = serverMod.resolvedApp?.agents?.mcp;
+	if (mcp) {
+		const endpoint = mcp.path ?? "/mcp";
+		problems.push(`the remote MCP endpoint ${endpoint} needs a server to answer requests, but a static export has none:\n  Remove agents.mcp or ${SERVERFUL_ADAPTER_HINT}`);
+	}
 	if (problems.length > 0) throw new Error(`Static export (@pracht/adapter-static) cannot build this app:\n\n` + problems.map((problem) => `  • ${problem}`).join("\n\n") + `\n`);
 }
 /**
@@ -1177,6 +1195,7 @@ async function runBuild(root, options = {}) {
 				markdownRoutes: Object.keys(markdownManifest),
 				regions: serverMod.vercelRegions,
 				root,
+				runtimeRoutes: resolveVercelRuntimeRoutes(serverMod.resolvedApp?.agents),
 				staticAssetRoutes: Object.keys(contentArtifactHeaders),
 				staticRoutes: [
 					...pages.map((page) => page.path).filter((path) => !(path in isgManifest)),

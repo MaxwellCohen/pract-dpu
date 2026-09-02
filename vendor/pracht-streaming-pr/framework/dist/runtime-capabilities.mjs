@@ -1,10 +1,10 @@
 import { formatUnknownNameError } from "./name-suggestions.mjs";
 import { CONFIRMATION_HEADER as CONFIRMATION_HEADER$1, CONFIRMATION_SECRET_ENV, canonicalJson, consumeConfirmationToken, createConfirmationToken, resolveConfirmationSecret, sha256Base64Url, verifyConfirmationToken } from "./runtime-confirmation.mjs";
 import { capabilityApprovalId, resolveCapabilityApprovalPrincipal, resolveCapabilityApprovalStore } from "./runtime-approval.mjs";
-import { bindAgentContext, snapshotAgentIdentity } from "./runtime-agent-context.mjs";
+import { bindAgentContext, rebindMcpTokenContext, snapshotAgentIdentity } from "./runtime-agent-context.mjs";
 import { resolveRegistryModule } from "./runtime-manifest.mjs";
 import { runMiddlewareChain } from "./runtime-middleware.mjs";
-import { CAPABILITY_EFFECT_HEADER, CAPABILITY_HTTP_PREFIX, CAPABILITY_TRANSPORT_HEADER, DEFAULT_MCP_ENDPOINT, MCP_SCHEMA_ROOT_ERROR, MCP_TOOL_NAME_ERROR, capabilityHttpPath, coerceFormInput, isValidCapabilityHttpPath, isValidMcpToolName, mcpToolName, normalizeCapabilityHttpPath } from "@pracht/capabilities";
+import { CAPABILITY_EFFECT_HEADER, CAPABILITY_HTTP_PREFIX, CAPABILITY_TRANSPORT_HEADER, DEFAULT_MCP_ENDPOINT, MCP_CONFIRMATION_META_KEY, MCP_SCHEMA_ROOT_ERROR, MCP_TOOL_NAME_ERROR, WEBMCP_TOOL_NAME_ERROR, capabilityHttpPath, coerceFormInput, isValidCapabilityHttpPath, isValidMcpToolName, isValidWebmcpToolName, mcpToolName, normalizeCapabilityHttpPath } from "@pracht/capabilities";
 //#region src/runtime-capabilities.ts
 /**
 * Capability registry and execution pipeline.
@@ -47,8 +47,9 @@ async function resolveAppCapabilitiesUncached(app, registry) {
 		if (!CAPABILITY_NAME_RE.test(name)) throw new Error(`Invalid capability name "${name}". Names must be dot-separated segments of letters, numbers, hyphens, and underscores (e.g. "notes.search").`);
 		const capability = (await resolveRegistryModule(registry.capabilityModules, file))?.default;
 		if (!capability || capability.kind !== "capability") throw new Error(`Capability "${name}" (${file}) must default-export the result of defineCapability() from @pracht/capabilities.`);
-		if (capability.effect === "destructive" && (capability.expose?.webmcp || capability.expose?.mcp)) throw new Error(`Capability "${name}": destructive capabilities cannot be exposed to agent projections (webmcp/mcp) yet — only expose.http with the confirmation flow.`);
+		if (capability.effect === "destructive" && capability.expose?.webmcp) throw new Error(`Capability "${name}": destructive capabilities cannot be exposed as WebMCP page tools — use expose.http, or expose.mcp with agents.mcp.destructive.`);
 		if (capability.expose?.webmcp && !capability.expose.http) throw new Error(`Capability "${name}": expose.webmcp requires expose.http.`);
+		if (capability.expose?.webmcp && !isValidWebmcpToolName(name)) throw new Error(`Capability "${name}": ${WEBMCP_TOOL_NAME_ERROR}.`);
 		if (capability.expose?.mcp && (capability.input?.type !== "object" || capability.output?.type !== "object")) throw new Error(`Capability "${name}": ${MCP_SCHEMA_ROOT_ERROR}.`);
 		if (capability.expose?.mcp && !isValidMcpToolName(mcpToolName(name))) throw new Error(`Capability "${name}": ${MCP_TOOL_NAME_ERROR}.`);
 		if (capability.expose && (typeof capability.validateInput !== "function" || typeof capability.validateOutput !== "function" || typeof capability.description !== "string" || !capability.input || !capability.output || !capability.effect)) throw new Error(`Capability "${name}" is exposed but is missing its contract (description, input schema, output schema, effect, validators).`);
@@ -212,8 +213,57 @@ async function responseMatchesEnvelope(response, settled) {
 	}
 }
 let capabilityAuditHook = null;
+const capabilityAuditListeners = /* @__PURE__ */ new Map();
 function setCapabilityAuditHook(hook) {
 	capabilityAuditHook = hook;
+}
+/**
+* Register an additional audit sink under a stable name, without displacing
+* the single-slot hook or any differently-named sink. Registering the same
+* name again replaces that sink — which is what makes the API safe to call
+* from module scope under dev HMR.
+*
+* Returns an unsubscribe function. It is idempotent, and it deliberately only
+* removes *its own* registration: after a reload replaced the name, a stale
+* closure's unsubscribe must not delete the live sink.
+*/
+function addCapabilityAuditListener(name, hook) {
+	const registration = { hook };
+	capabilityAuditListeners.set(name, registration);
+	return () => {
+		if (capabilityAuditListeners.get(name) === registration) capabilityAuditListeners.delete(name);
+	};
+}
+/** Test/teardown helper — drops every additive sink. */
+function clearCapabilityAuditListeners() {
+	capabilityAuditListeners.clear();
+}
+const warnedAuditSinks = /* @__PURE__ */ new WeakSet();
+/**
+* Deliver one event to one sink. Exceptions are swallowed — an observer must
+* never fail a capability call — but the first failure *from that sink* is
+* reported so a broken sink is not invisible. Later failures from the same
+* sink stay quiet rather than emitting a line per capability call.
+*/
+function deliverCapabilityAudit(label, hook, snapshot, warningKey) {
+	if (!hook) return;
+	const sinkKey = warningKey ?? hook;
+	try {
+		hook(snapshot);
+	} catch (error) {
+		if (warnedAuditSinks.has(sinkKey)) return;
+		warnedAuditSinks.add(sinkKey);
+		try {
+			console.warn(`[pracht] Capability audit sink ${JSON.stringify(label)} threw and was ignored: ${describeCapabilityAuditError(error)}. Audit sinks must never throw; further failures from this sink are not reported.`);
+		} catch {}
+	}
+}
+function describeCapabilityAuditError(error) {
+	try {
+		return error instanceof Error ? error.message : String(error);
+	} catch {
+		return "<unprintable error>";
+	}
 }
 /** Audit hooks observe; they must never break a request. */
 function emitCapabilityAudit(event, extra) {
@@ -221,12 +271,11 @@ function emitCapabilityAudit(event, extra) {
 		...event,
 		agent: snapshotAgentIdentity(event.agent)
 	});
-	for (const hook of [capabilityAuditHook, extra]) {
-		if (!hook) continue;
-		try {
-			hook(snapshot);
-		} catch {}
-	}
+	const singleSlotHook = capabilityAuditHook;
+	const listeners = Array.from(capabilityAuditListeners);
+	deliverCapabilityAudit("setCapabilityAuditHook", singleSlotHook, snapshot);
+	for (const [name, registration] of listeners) deliverCapabilityAudit(name, registration.hook, snapshot, registration);
+	deliverCapabilityAudit("onCapabilityAudit", extra, snapshot);
 }
 /**
 * Handle a matched capability HTTP request. Method/CSRF checks already ran in
@@ -378,7 +427,11 @@ async function dispatchCapabilityHttp(options) {
 		})), "invalid_json");
 	}
 	try {
-		const beforeRun = capability.effect === "destructive" ? (validatedInput) => enforceDestructiveConfirmation(options, validatedInput) : void 0;
+		const beforeRun = capability.effect === "destructive" ? async (validatedInput) => {
+			const gate = await enforceDestructiveConfirmation(options, validatedInput);
+			if (gate === null) markDestructiveConfirmed(options.request);
+			return gate;
+		} : void 0;
 		const outcome = await runCapabilityPipeline({
 			resolved: options.match,
 			input,
@@ -451,6 +504,13 @@ async function enforceDestructiveConfirmation(options, validatedInput) {
 	const name = options.match.name;
 	const store = resolveCapabilityApprovalStore();
 	const mode = options.agents?.confirmation?.mode ?? "token";
+	if (options.transport === "mcp" && !store) return {
+		status: 403,
+		envelope: errorEnvelope({
+			code: "confirmation_unavailable",
+			message: `Destructive capability "${name}" cannot run over remote MCP: no approval store is registered, so commits could not be made exactly-once (call setCapabilityApprovalStore() from a server-only module).`
+		})
+	};
 	if (mode === "human" && !store) return {
 		status: 403,
 		envelope: errorEnvelope({
@@ -516,24 +576,29 @@ async function enforceDestructiveConfirmation(options, validatedInput) {
 				decidedAt: null
 			}));
 			if (!created.ok) return created.failure;
-			if (created.value.state === "consumed" || created.value.state === "rejected") return {
-				status: 403,
-				envelope: errorEnvelope({
-					code: "confirmation_invalid",
-					message: `Confirmation request rejected (${created.value.state === "consumed" ? "already_used" : "rejected"}).`
-				})
-			};
+			if (created.value.state === "consumed" || created.value.state === "rejected") {
+				const retryAfterSeconds = Math.max(1, created.value.expiresAt - now);
+				return {
+					status: 403,
+					envelope: errorEnvelope({
+						code: "confirmation_invalid",
+						message: `Confirmation request rejected (${created.value.state === "consumed" ? "already_used" : "rejected"}): this exact operation was already decided and stays closed until its approval expires. Retry the same input in ${retryAfterSeconds}s, or call with different input.`,
+						retryAfterSeconds
+					})
+				};
+			}
 			expiresAtLimit = created.value.expiresAt - now;
 		}
 		const { token, expiresAt } = await createConfirmationToken({
 			...binding,
 			ttlSeconds: store ? Math.max(1, expiresAtLimit) : ttlSeconds
 		});
+		const echo = options.transport === "mcp" ? `repeat the tools/call with identical arguments and the token in _meta["${MCP_CONFIRMATION_META_KEY}"]` : `repeat the call with identical input and the "${CONFIRMATION_HEADER$1}" header set to the confirmation token`;
 		return {
 			status: 409,
 			envelope: errorEnvelope({
 				code: "confirmation_required",
-				message: mode === "human" ? `Capability "${name}" is destructive and needs human approval. Repeat the call with identical input and the "${CONFIRMATION_HEADER$1}" header once the proposal is approved.` : `Capability "${name}" is destructive. Repeat the call with identical input and the "${CONFIRMATION_HEADER$1}" header set to the confirmation token.`,
+				message: mode === "human" ? `Capability "${name}" is destructive and needs human approval. Once the proposal is approved, ${echo}.` : `Capability "${name}" is destructive. To commit, ${echo}.`,
 				confirmationToken: token,
 				expiresAt,
 				...approvalId ? { approvalId } : {}
@@ -631,13 +696,29 @@ function middlewareErrorCode(status) {
 	return "middleware_rejected";
 }
 const activeCapabilityHosts = /* @__PURE__ */ new WeakMap();
-function setActiveCapabilityHost(request, app, registry, via = "http", onAudit, agent) {
-	activeCapabilityHosts.set(request, {
+/**
+* Record that the destructive dispatch on this request cleared prepare/commit,
+* so capabilities it composes may perform destructive work too. Called only
+* from the confirmation gate; there is no caller-reachable path to it.
+*/
+function markDestructiveConfirmed(request) {
+	const host = activeCapabilityHosts.get(request);
+	if (host) host.destructiveConfirmed = true;
+}
+/** End the destructive-composition grant when the confirmed dispatch settles. */
+function clearDestructiveConfirmed(request) {
+	const host = activeCapabilityHosts.get(request);
+	if (host) host.destructiveConfirmed = false;
+}
+function setActiveCapabilityHost(request, app, registry, via = "http", onAudit, agent, tokenAuth, sharedRequest) {
+	const sharedHost = sharedRequest ? activeCapabilityHosts.get(sharedRequest) : void 0;
+	activeCapabilityHosts.set(request, sharedHost ?? {
 		app,
 		registry,
 		via,
 		onAudit,
-		agent: snapshotAgentIdentity(agent ?? null)
+		agent: snapshotAgentIdentity(agent ?? null),
+		tokenAuth
 	});
 }
 async function invokeCapability(name, input, ctx) {
@@ -717,7 +798,7 @@ async function invokeCapabilityOnHost(host, name, input, ctx) {
 /**
 * Remote MCP tools may compose private capabilities, but they must not turn
 * that server-only reachability into a bypass around agent identity or the
-* transport's destructive-effect prohibition. These checks run before the
+* confirmation flow destructive effects require. These checks run before the
 * callee's pipeline, matching the placement of `agentPolicy` in HTTP dispatch
 * and ensuring denied calls cannot trigger middleware side effects.
 */
@@ -735,10 +816,10 @@ function mcpCompositionGuard(host, resolved) {
 			response: envelopeResponse(401, envelope)
 		};
 	}
-	if (resolved.capability.effect === "destructive") {
+	if (resolved.capability.effect === "destructive" && !host.destructiveConfirmed) {
 		const envelope = errorEnvelope({
 			code: "forbidden",
-			message: `Capability "${resolved.name}" cannot be composed from remote MCP because it is destructive.`
+			message: `Capability "${resolved.name}" cannot be composed from remote MCP because it is destructive and no confirmed destructive dispatch is in scope for this request.`
 		});
 		return {
 			kind: "envelope",
@@ -758,9 +839,10 @@ function mcpCompositionGuard(host, resolved) {
 * valid nested call into a rejected promise.
 */
 function capabilityPipelineContext(host, supplied) {
-	const context = supplied ?? {};
-	if (!(!!host.app.agents?.webBotAuth && (host.via === "http" || host.via === "mcp"))) return context;
-	return bindAgentContext(context, host.agent ?? null);
+	let context = supplied ?? {};
+	if (!!host.app.agents?.webBotAuth && (host.via === "http" || host.via === "mcp")) context = bindAgentContext(context, host.agent ?? null);
+	if (host.via === "mcp" && host.tokenAuth !== void 0) context = rebindMcpTokenContext(context, host.tokenAuth);
+	return context;
 }
 function capabilityHostAgent(host, context) {
 	return host.via === "http" || host.via === "mcp" ? host.agent ?? null : context.agent ?? null;
@@ -778,4 +860,4 @@ function envelopeResponse(status, envelope) {
 	});
 }
 //#endregion
-export { CAPABILITY_HTTP_PREFIX, capabilityHttpPath, envelopeResponse, handleCapabilityRequest, invokeCapability, invokeCapabilityOnHost, isRegisteredCapabilityHttpPath, matchCapabilityRoute, resolveAppCapabilities, setActiveCapabilityHost, setCapabilityAuditHook };
+export { CAPABILITY_HTTP_PREFIX, addCapabilityAuditListener, capabilityHttpPath, clearCapabilityAuditListeners, clearDestructiveConfirmed, envelopeResponse, handleCapabilityRequest, invokeCapability, invokeCapabilityOnHost, isRegisteredCapabilityHttpPath, matchCapabilityRoute, resolveAppCapabilities, setActiveCapabilityHost, setCapabilityAuditHook };

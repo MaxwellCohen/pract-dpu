@@ -1,5 +1,5 @@
-import { SAFE_METHODS } from "./runtime-constants.mjs";
 import { withBase } from "./base.mjs";
+import { SAFE_METHODS } from "./runtime-constants.mjs";
 import { resolveRegistryModule } from "./runtime-manifest.mjs";
 import { parseSafeNavigationUrl } from "./runtime-client-fetch.mjs";
 import { applyHeaders } from "./runtime-headers.mjs";

@@ -1,4 +1,4 @@
-import { t as runDoctor } from "./verification-C-W0SniA.mjs";
+import { t as runDoctor } from "./verification-DKDfRzp_.mjs";
 import { defineCommand } from "citty";
 //#region src/commands/doctor.ts
 var doctor_default = defineCommand({

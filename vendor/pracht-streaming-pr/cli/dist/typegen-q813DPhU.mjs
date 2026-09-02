@@ -1,6 +1,6 @@
 import { t as __exportAll } from "./rolldown-runtime-wcPFST8Q.mjs";
 import { a as readProjectConfig, c as resolveProjectPath, f as ensureTrailingNewline, n as displayPath, p as handleCliError } from "./project-C-2I9C0N.mjs";
-import { n as runInspect } from "./inspect-B_0KqO5L.mjs";
+import { n as runInspect } from "./inspect-BepW0Qs9.mjs";
 import { defineCommand } from "citty";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";

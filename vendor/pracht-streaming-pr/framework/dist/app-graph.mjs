@@ -1,4 +1,5 @@
 import { resolveMcpEndpoint } from "./mcp-config.mjs";
+import { destructiveMcpPreconditionErrors } from "./runtime-mcp.mjs";
 import { capabilityHttpPath } from "@pracht/capabilities";
 import { extractCapabilityProjection } from "@pracht/capabilities/static";
 //#region src/app-graph.ts
@@ -141,12 +142,59 @@ function serializeCapabilities(capabilities, access, options = {}) {
 		}
 	}));
 }
+/** Whether the configured projection actually has a destructive MCP tool to serve. */
+function servesDestructiveMcpTools(app, capabilities) {
+	return app.agents?.mcp?.destructive === true && capabilities.some((capability) => capability.effect === "destructive" && capability.transports.includes("mcp"));
+}
+/**
+* Server-only middleware modules whose top-level setup may satisfy destructive
+* MCP preconditions. This mirrors the runtime endpoint: app API middleware and
+* named middleware applied to a served destructive capability are startup
+* inputs; unrelated registered middleware remains lazy.
+*/
+function destructiveMcpSetupMiddlewareFiles(app, capabilities) {
+	if (!servesDestructiveMcpTools(app, capabilities)) return [];
+	const names = new Set(app.api?.middleware ?? []);
+	for (const capability of capabilities) {
+		if (capability.effect !== "destructive" || !capability.transports.includes("mcp")) continue;
+		for (const name of capability.middleware) names.add(name);
+	}
+	return [...names].flatMap((name) => {
+		const file = app.middleware?.[name];
+		return file ? [file] : [];
+	});
+}
 async function buildAppGraph(options) {
 	const notFound = options.app.notFound;
+	const capabilities = await serializeCapabilities(options.app.capabilities, options);
+	const mcpEndpoint = resolveMcpEndpoint(options.app.agents);
+	const capabilityFailures = mcpEndpoint === null ? [] : capabilities.flatMap((capability) => capability.error ? [`Capability ${JSON.stringify(capability.name)} failed to load: ${capability.error}`] : []);
+	const mcpDestructive = servesDestructiveMcpTools(options.app, capabilities);
+	let verifierFailure = null;
+	if (options.app.agents?.mcp?.auth && options.verifyMcpTokenVerifier) try {
+		await options.verifyMcpTokenVerifier();
+	} catch (error) {
+		verifierFailure = `MCP token verifier failed to load: ${error instanceof Error ? error.message : String(error)}`;
+	}
+	let setupFailure = null;
+	if (mcpDestructive && options.loadSetupModule) try {
+		await Promise.all(destructiveMcpSetupMiddlewareFiles(options.app, capabilities).map(options.loadSetupModule));
+	} catch (error) {
+		setupFailure = `destructive MCP setup modules failed to load: ${error instanceof Error ? error.message : String(error)}`;
+	}
+	const mcpUnavailableReasons = [
+		...capabilityFailures,
+		...verifierFailure === null ? [] : [verifierFailure],
+		...setupFailure !== null ? [setupFailure] : mcpDestructive ? destructiveMcpPreconditionErrors(options.app.agents) : []
+	];
 	return {
 		api: await serializeApiRoutes(options.apiRoutes ?? [], options),
-		capabilities: await serializeCapabilities(options.app.capabilities, options),
-		mcpEndpoint: resolveMcpEndpoint(options.app.agents),
+		capabilities,
+		mcpEndpoint,
+		mcpDestructive,
+		mcpAuthenticated: !!options.app.agents?.mcp?.auth,
+		mcpRuntimeStatus: mcpEndpoint === null ? "not-configured" : mcpUnavailableReasons.length > 0 ? "blocked" : "ready",
+		mcpUnavailableReasons,
 		notFound: notFound ? serializeAppRoutes([notFound])[0] : null,
 		routes: serializeAppRoutes(options.app.routes)
 	};
@@ -467,4 +515,4 @@ async function detectApiMethods(file, access) {
 	return (await detectApiExports(file, access)).methods;
 }
 //#endregion
-export { API_METHOD_ORDER, buildAppGraph, detectApiExports, detectApiExportsStatic, detectApiMethods, serializeApiRoutes, serializeApiRoutesStatic, serializeAppRoutes, serializeCapabilities };
+export { API_METHOD_ORDER, buildAppGraph, destructiveMcpSetupMiddlewareFiles, detectApiExports, detectApiExportsStatic, detectApiMethods, serializeApiRoutes, serializeApiRoutesStatic, serializeAppRoutes, serializeCapabilities, servesDestructiveMcpTools };

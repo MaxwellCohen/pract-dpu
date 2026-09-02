@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, open, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
-import { PRACHT_REVALIDATE_ENDPOINT, RevalidationReport, applyDefaultSecurityHeaders, classifyRevalidationSkip, createBaseRedirectResponse, createISGRegenerationRequest, createRevalidationSingleFlight, getTimeRevalidateSeconds, handlePrachtRequest, isCacheableISGResponse, jsonResponse, matchAppRoute, prefersMarkdown, preventHeuristicCaching, readRevalidationRequest, resolveRevalidationToken, restoreBasePathInRequest, routeSupportsMarkdown, stripBase } from "@pracht/core/server";
+import { PRACHT_REVALIDATE_ENDPOINT, RevalidationReport, applyDefaultSecurityHeaders, classifyRevalidationSkip, createBaseRedirectResponse, createISGRegenerationRequest, createRevalidationSingleFlight, getTimeRevalidateSeconds, handlePrachtRequest, isCacheableISGResponse, isMcpResourceMetadataPath, jsonResponse, matchAppRoute, prefersMarkdown, preventHeuristicCaching, readRevalidationRequest, resolveRevalidationToken, restoreBasePathInRequest, routeSupportsMarkdown, stripBase } from "@pracht/core/server";
 import { promisify } from "node:util";
 import { brotliCompress, constants, createBrotliCompress, createGzip, gzip } from "node:zlib";
 import { Readable } from "node:stream";
@@ -866,6 +866,8 @@ function createNodeRequestHandler(options) {
 			return;
 		}
 		const url = new URL(request.url);
+		const mcpAuth = options.app.agents?.mcp?.auth;
+		const isMcpMetadataRequest = mcpAuth !== void 0 && isMcpResourceMetadataPath(url.pathname, mcpAuth);
 		const routePathname = options.basePathStripped ? url.pathname : stripBase(url.pathname);
 		const compression = compressionEnabled ? {
 			cache: compressedAssetCache,
@@ -881,14 +883,14 @@ function createNodeRequestHandler(options) {
 			}, compression), compression);
 			return;
 		}
-		if (staticDir && isStaticAssetMethod(request.method) && !wantsMarkdown && !isTransportRouteStateRequest && routePathname !== null) {
+		if (staticDir && isStaticAssetMethod(request.method) && !isMcpMetadataRequest && !wantsMarkdown && !isTransportRouteStateRequest && routePathname !== null) {
 			const staticResult = await resolveStaticFile(staticDir, routePathname, isgManifest);
 			if (staticResult) {
 				await serveStaticFile(request, res, staticResult, headersManifest, routePathname, compression);
 				return;
 			}
 		}
-		if (staticDir && isStaticAssetMethod(request.method) && !isTransportRouteStateRequest && !wantsMarkdown && routePathname !== null && routePathname in isgManifest) {
+		if (staticDir && isStaticAssetMethod(request.method) && !isMcpMetadataRequest && !isTransportRouteStateRequest && !wantsMarkdown && routePathname !== null && routePathname in isgManifest) {
 			if (await serveISGEntry(request, res, options, staticDir, routePathname, isgManifest[routePathname], headersManifest, {
 				request,
 				req,

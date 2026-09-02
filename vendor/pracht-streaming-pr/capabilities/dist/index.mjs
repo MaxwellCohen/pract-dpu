@@ -1,4 +1,4 @@
-import { C as isValidMcpToolName, S as isValidCapabilityHttpPath, T as normalizeCapabilityHttpPath, _ as MCP_PROTOCOL_VERSION_HEADER, a as CAPABILITY_HTTP_PREFIX, b as capabilityHttpPath, c as CONFIRMATION_HEADER, d as MCP_CAPABILITY_META_KEY, f as MCP_CONFIRMATION_META_KEY, g as MCP_PROTOCOL_VERSIONS, h as MCP_LATEST_PROTOCOL_VERSION, i as CAPABILITY_FORM_REQUEST_HEADER, l as CONFIRMATION_SECRET_ENV, m as MCP_ERROR_META_KEY, n as CAPABILITY_ERROR_CODES, o as CAPABILITY_SETTLED_EVENT, p as MCP_EFFECT_META_KEY, r as CAPABILITY_FORM_REDIRECT_HEADER, s as CAPABILITY_TRANSPORT_HEADER, t as CAPABILITY_EFFECT_HEADER, u as DEFAULT_MCP_ENDPOINT, v as MCP_STATUS_META_KEY, w as mcpToolName, x as findMcpToolNameCollisions, y as MCP_TOOL_NAME_ERROR } from "./protocol-Cx7CpoHZ.mjs";
+import { C as isValidCapabilityHttpPath, D as normalizeCapabilityHttpPath, E as mcpToolName, S as findMcpToolNameCollisions, T as isValidWebmcpToolName, _ as MCP_PROTOCOL_VERSION_HEADER, a as CAPABILITY_HTTP_PREFIX, b as WEBMCP_TOOL_NAME_ERROR, c as CONFIRMATION_HEADER, d as MCP_CAPABILITY_META_KEY, f as MCP_CONFIRMATION_META_KEY, g as MCP_PROTOCOL_VERSIONS, h as MCP_LATEST_PROTOCOL_VERSION, i as CAPABILITY_FORM_REQUEST_HEADER, l as CONFIRMATION_SECRET_ENV, m as MCP_ERROR_META_KEY, n as CAPABILITY_ERROR_CODES, o as CAPABILITY_SETTLED_EVENT, p as MCP_EFFECT_META_KEY, r as CAPABILITY_FORM_REDIRECT_HEADER, s as CAPABILITY_TRANSPORT_HEADER, t as CAPABILITY_EFFECT_HEADER, u as DEFAULT_MCP_ENDPOINT, v as MCP_STATUS_META_KEY, w as isValidMcpToolName, x as capabilityHttpPath, y as MCP_TOOL_NAME_ERROR } from "./protocol-Ck3OUbxD.mjs";
 //#region src/schema.ts
 const SUPPORTED_KEYWORDS = new Set([
 	"type",
@@ -251,7 +251,7 @@ function isPlainObject$2(value) {
 }
 //#endregion
 //#region src/capability.ts
-const DESTRUCTIVE_EXPOSURE_ERROR = "destructive capabilities cannot be exposed to agent projections (webmcp/mcp) yet — only expose.http, where the prepare/commit confirmation flow gates every call";
+const DESTRUCTIVE_EXPOSURE_ERROR = "destructive capabilities cannot be exposed to WebMCP page tools — a browser host's approval UX is not a security boundary. Use expose.http, or expose.mcp with agents.mcp.destructive, where the server-verified prepare/commit confirmation flow gates every call";
 const MCP_SCHEMA_ROOT_ERROR = "expose.mcp requires \"input\" and \"output\" schemas with type: \"object\" for the supported MCP protocol versions";
 /**
 * Define a protocol-neutral application capability.
@@ -259,14 +259,19 @@ const MCP_SCHEMA_ROOT_ERROR = "expose.mcp requires \"input\" and \"output\" sche
 * Fails fast (throws) on invalid definitions instead of deferring problems to
 * request time: missing contract fields, schemas outside the supported JSON
 * Schema subset, `webmcp` exposure without an HTTP projection to dispatch
-* through, and `webmcp`/`mcp` exposure of a `destructive` capability
-* (destructive + `expose.http` is allowed — the runtime's server-verified
-* prepare/commit confirmation flow gates every dispatch).
+* through, and `webmcp` exposure of a `destructive` capability.
+*
+* `destructive` + `expose.http` and `destructive` + `expose.mcp` are both
+* allowed — the runtime's server-verified prepare/commit confirmation flow
+* gates every dispatch on either transport. Serving destructive tools over
+* remote MCP additionally requires the app-level `agents.mcp.destructive`
+* opt-in and a registered approval store; without the opt-in the projection
+* filters them out at serve time.
 */
 function defineCapability(definition) {
 	assertDefinition(definition);
 	const expose = normalizeExposure(definition.expose);
-	if (definition.effect === "destructive" && (expose?.webmcp || expose?.mcp)) throw new Error(`defineCapability("${definition.title}"): ${DESTRUCTIVE_EXPOSURE_ERROR}.`);
+	if (definition.effect === "destructive" && expose?.webmcp) throw new Error(`defineCapability("${definition.title}"): ${DESTRUCTIVE_EXPOSURE_ERROR}.`);
 	if (expose?.webmcp && !expose.http) throw new Error(`defineCapability("${definition.title}"): expose.webmcp requires expose.http — WebMCP page tools dispatch through the HTTP projection so all enforcement stays server-side.`);
 	if (expose?.mcp && (definition.input.type !== "object" || definition.output.type !== "object")) throw new Error(`defineCapability("${definition.title}"): ${MCP_SCHEMA_ROOT_ERROR}.`);
 	return {
@@ -336,10 +341,19 @@ function normalizeExposure(expose) {
 			};
 		} else http = { method: "POST" };
 	}
+	let webmcp = false;
+	let webmcpUntrustedContent = false;
+	if (expose.webmcp === true) webmcp = true;
+	else if (expose.webmcp && typeof expose.webmcp === "object" && !Array.isArray(expose.webmcp)) {
+		if (expose.webmcp.untrustedContent !== void 0 && typeof expose.webmcp.untrustedContent !== "boolean") throw new Error("Capability WebMCP exposure \"untrustedContent\" must be a boolean.");
+		webmcp = true;
+		webmcpUntrustedContent = expose.webmcp.untrustedContent === true;
+	} else if (expose.webmcp !== void 0 && expose.webmcp !== false && expose.webmcp !== null) throw new Error("Capability \"expose.webmcp\" must be a boolean or an options object.");
 	const normalized = {
 		http,
 		mcp: expose.mcp === true,
-		webmcp: expose.webmcp === true
+		webmcp,
+		webmcpUntrustedContent
 	};
 	if (!normalized.http && !normalized.mcp && !normalized.webmcp) return null;
 	return normalized;
@@ -448,4 +462,4 @@ function isPlainObject(value) {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 //#endregion
-export { CAPABILITY_EFFECT_HEADER, CAPABILITY_ERROR_CODES, CAPABILITY_FORM_REDIRECT_HEADER, CAPABILITY_FORM_REQUEST_HEADER, CAPABILITY_HTTP_PREFIX, CAPABILITY_SETTLED_EVENT, CAPABILITY_TRANSPORT_HEADER, CONFIRMATION_HEADER, CONFIRMATION_SECRET_ENV, DEFAULT_MCP_ENDPOINT, DESTRUCTIVE_EXPOSURE_ERROR, MCP_CAPABILITY_META_KEY, MCP_CONFIRMATION_META_KEY, MCP_EFFECT_META_KEY, MCP_ERROR_META_KEY, MCP_LATEST_PROTOCOL_VERSION, MCP_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSION_HEADER, MCP_SCHEMA_ROOT_ERROR, MCP_STATUS_META_KEY, MCP_TOOL_NAME_ERROR, applySchemaDefaults, capabilityHttpPath, coerceFormInput, collectInvalidSchemaKeywordValues, collectUnsupportedSchemaKeywords, defineCapability, findMcpToolNameCollisions, isValidCapabilityHttpPath, isValidMcpToolName, mcpToolName, normalizeCapabilityHttpPath, schemaToTypeText, validateAgainstSchema };
+export { CAPABILITY_EFFECT_HEADER, CAPABILITY_ERROR_CODES, CAPABILITY_FORM_REDIRECT_HEADER, CAPABILITY_FORM_REQUEST_HEADER, CAPABILITY_HTTP_PREFIX, CAPABILITY_SETTLED_EVENT, CAPABILITY_TRANSPORT_HEADER, CONFIRMATION_HEADER, CONFIRMATION_SECRET_ENV, DEFAULT_MCP_ENDPOINT, DESTRUCTIVE_EXPOSURE_ERROR, MCP_CAPABILITY_META_KEY, MCP_CONFIRMATION_META_KEY, MCP_EFFECT_META_KEY, MCP_ERROR_META_KEY, MCP_LATEST_PROTOCOL_VERSION, MCP_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSION_HEADER, MCP_SCHEMA_ROOT_ERROR, MCP_STATUS_META_KEY, MCP_TOOL_NAME_ERROR, WEBMCP_TOOL_NAME_ERROR, applySchemaDefaults, capabilityHttpPath, coerceFormInput, collectInvalidSchemaKeywordValues, collectUnsupportedSchemaKeywords, defineCapability, findMcpToolNameCollisions, isValidCapabilityHttpPath, isValidMcpToolName, isValidWebmcpToolName, mcpToolName, normalizeCapabilityHttpPath, schemaToTypeText, validateAgainstSchema };

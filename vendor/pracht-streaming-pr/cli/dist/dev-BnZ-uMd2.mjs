@@ -1,7 +1,7 @@
-import { r as collectAppGraph } from "./app-server-Bd0VAe05.mjs";
+import { h as collectAppGraph } from "./graph-snapshot-C3nG4UBK.mjs";
 import { a as readProjectConfig, c as resolveProjectPath, v as requirePositiveInteger } from "./project-C-2I9C0N.mjs";
 import { a as isRouteSource, o as isWithinDirectory } from "./verification-helpers-D_Az_Kqg.mjs";
-import { i as runTypegen, n as DEFAULT_DECLARATION_OUT, r as DEFAULT_RUNTIME_OUT, t as DEFAULT_CAPABILITIES_OUT } from "./typegen-DI4BSR5Y.mjs";
+import { i as runTypegen, n as DEFAULT_DECLARATION_OUT, r as DEFAULT_RUNTIME_OUT, t as DEFAULT_CAPABILITIES_OUT } from "./typegen-q813DPhU.mjs";
 import { defineCommand } from "citty";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
@@ -68,7 +68,8 @@ const EFFECT_COLORS = {
 * of page routes (pattern, render mode, shell, middleware) and API routes.
 */
 function formatDevBanner(options) {
-	const { apiRoutes, capabilities = [], color = false, localUrls, mcpEndpoint = null, networkUrls = [], notFound, routes } = options;
+	const { apiRoutes, capabilities = [], color = false, localUrls, mcpDestructive = false, mcpAuthenticated = false, mcpEndpoint = null, mcpRuntimeStatus: configuredMcpRuntimeStatus, mcpUnavailableReasons = [], networkUrls = [], notFound, routes } = options;
+	const mcpRuntimeStatus = configuredMcpRuntimeStatus ?? (mcpEndpoint === null ? "not-configured" : mcpUnavailableReasons.length > 0 ? "blocked" : "ready");
 	const paint = (text, code) => color ? `\u001b[${code}m${text}\u001b[0m` : text;
 	const lines = [];
 	lines.push("");
@@ -119,14 +120,14 @@ function formatDevBanner(options) {
 	lines.push("");
 	if (capabilities.length > 0 || mcpEndpoint) {
 		const heading = `Capabilities (${capabilities.length})`;
-		lines.push(mcpEndpoint ? `  ${paint(heading, ANSI.bold)}  ${paint(`MCP endpoint ${mcpEndpoint}`, ANSI.dim)}` : `  ${paint(heading, ANSI.bold)}`);
+		lines.push(mcpEndpoint ? `  ${paint(heading, ANSI.bold)}  ${paint(`MCP endpoint ${mcpEndpoint}${mcpAuthenticated ? " (oauth)" : ""}`, ANSI.dim)}` : `  ${paint(heading, ANSI.bold)}`);
 		if (capabilities.length === 0) lines.push("    (none)");
 		else {
 			const unreadable = capabilities.filter((capability) => capability.error);
 			const rows = capabilities.map((capability) => [
 				capability.name,
 				capability.effect ?? "?",
-				capability.transports.length > 0 ? capability.transports.map((transport) => transport === "mcp" && !mcpEndpoint ? "mcp(unserved)" : transport).join(",") : "private",
+				capability.transports.length > 0 ? capability.transports.map((transport) => transport !== "mcp" ? transport : !mcpEndpoint || capability.effect === "destructive" && !mcpDestructive || mcpRuntimeStatus === "blocked" ? "mcp(unserved)" : mcpRuntimeStatus === "unverified" ? "mcp(unverified)" : transport).join(",") : "private",
 				capability.httpPath ?? "-"
 			]);
 			const header = [
@@ -148,6 +149,7 @@ function formatDevBanner(options) {
 				lines.push(`    ${cells.join("  ")}`.trimEnd());
 			}
 			for (const capability of unreadable) lines.push(`    ${paint(`! ${capability.name} could not be loaded: ${capability.error}`, ANSI.red)}`);
+			if (mcpUnavailableReasons.length > 0) lines.push(`    ${paint(mcpRuntimeStatus === "unverified" ? `! MCP endpoint unverified: ${mcpUnavailableReasons.join(" ")} Registrations in the adapter server entry are not evaluated by graph-only inspection.` : `! MCP endpoint unavailable: ${mcpUnavailableReasons.join(" ")}`, mcpRuntimeStatus === "unverified" ? ANSI.yellow : ANSI.red)}`);
 			if (unreadable.length > 0) lines.push(`    ${paint("  Effect, exposure, policy and middleware above were recovered from the source; output schemas are unavailable, so `pracht typegen` types them as `unknown`. If the module imports `@pracht/capabilities`, install it.", ANSI.dim)}`);
 		}
 		lines.push("");
@@ -210,7 +212,11 @@ var dev_default = defineCommand({
 				capabilities: graph.capabilities,
 				color: supportsColor(),
 				localUrls: urls.local,
+				mcpAuthenticated: graph.mcpAuthenticated,
 				mcpEndpoint: graph.mcpEndpoint ?? null,
+				mcpDestructive: graph.mcpDestructive === true,
+				mcpRuntimeStatus: graph.mcpRuntimeStatus,
+				mcpUnavailableReasons: graph.mcpUnavailableReasons,
 				networkUrls: urls.network,
 				notFound: graph.notFound,
 				routes: graph.routes

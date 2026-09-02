@@ -1,5 +1,5 @@
-import { PREFETCH_ATTRIBUTE, PRESERVE_SCROLL_ATTRIBUTE, SAFE_METHODS, SPECULATE_ATTRIBUTE, VIEW_TRANSITION_ATTRIBUTE } from "./runtime-constants.mjs";
 import { withBase } from "./base.mjs";
+import { PREFETCH_ATTRIBUTE, PRESERVE_SCROLL_ATTRIBUTE, SAFE_METHODS, SPECULATE_ATTRIBUTE, VIEW_TRANSITION_ATTRIBUTE } from "./runtime-constants.mjs";
 import { buildHrefUntyped } from "./route-matching.mjs";
 import { formDataToRecord, isApiValidationErrorBody, validateStandardSchema } from "./api-validation.mjs";
 import { navigateToClientLocation, parseSafeNavigationUrl } from "./runtime-client-fetch.mjs";

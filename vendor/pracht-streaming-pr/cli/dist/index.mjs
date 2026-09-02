@@ -43,19 +43,19 @@ runMain(defineCommand({
 		description: "The pracht CLI"
 	},
 	subCommands: {
-		build: () => import("./build-NoLjhmns.mjs").then((n) => n.t).then((m) => m.default),
-		dev: () => import("./dev-BJqny6NI.mjs").then((m) => m.default),
-		doctor: () => import("./doctor-BZIyKaGP.mjs").then((m) => m.default),
-		eval: () => import("./eval-OtappeXD.mjs").then((m) => m.default),
-		generate: () => import("./generate-vKZ__lza.mjs").then((n) => n.o).then((m) => m.default),
-		inspect: () => import("./inspect-B_0KqO5L.mjs").then((n) => n.t).then((m) => m.default),
-		llms: () => import("./llms-CYmsNRac.mjs").then((m) => m.default),
-		mcp: () => import("./mcp-C9pqnsow.mjs").then((m) => m.default),
-		plan: () => import("./plan-cXvLMKiH.mjs").then((n) => n.r).then((m) => m.default),
-		preview: () => import("./preview-W12fgmcs.mjs").then((n) => n.n).then((m) => m.default),
-		report: () => import("./report-Bnon9gjy.mjs").then((n) => n.t).then((m) => m.default),
-		typegen: () => import("./typegen-DI4BSR5Y.mjs").then((n) => n.a).then((m) => m.default),
-		verify: () => import("./verify-Bz7oG4mI.mjs").then((m) => m.default)
+		build: () => import("./build-BTrv4ZNf.mjs").then((n) => n.t).then((m) => m.default),
+		dev: () => import("./dev-BnZ-uMd2.mjs").then((m) => m.default),
+		doctor: () => import("./doctor-BJJodPUi.mjs").then((m) => m.default),
+		eval: () => import("./eval-g-Qoor09.mjs").then((m) => m.default),
+		generate: () => import("./generate-BqQ17MhF.mjs").then((n) => n.o).then((m) => m.default),
+		inspect: () => import("./inspect-BepW0Qs9.mjs").then((n) => n.t).then((m) => m.default),
+		llms: () => import("./llms-COJ9Tz3Q.mjs").then((m) => m.default),
+		mcp: () => import("./mcp-XvEAUd-K.mjs").then((m) => m.default),
+		plan: () => import("./plan-CONnOB3b.mjs").then((n) => n.r).then((m) => m.default),
+		preview: () => import("./preview-DoGo6ljG.mjs").then((n) => n.n).then((m) => m.default),
+		report: () => import("./report-Cli5wivd.mjs").then((n) => n.t).then((m) => m.default),
+		typegen: () => import("./typegen-q813DPhU.mjs").then((n) => n.a).then((m) => m.default),
+		verify: () => import("./verify-B3iK9fL7.mjs").then((m) => m.default)
 	}
 }));
 //#endregion

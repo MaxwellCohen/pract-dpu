@@ -1,5 +1,5 @@
-import { ROUTE_STATE_REQUEST_HEADER, SAFE_METHODS } from "./runtime-constants.mjs";
 import { resolveBaseRedirectLocation, restoreBasePathInRequest, stripBase } from "./base.mjs";
+import { ROUTE_STATE_REQUEST_HEADER, SAFE_METHODS } from "./runtime-constants.mjs";
 import { matchApiRoute, matchAppRoute, resolveApp } from "./app.mjs";
 import { collectFontHeadFragments } from "./font.mjs";
 import { CLIENT_ENTRY_MANIFEST_KEY, ISLANDS_ENTRY_MANIFEST_KEY, mergeEntryPreloadUrls, resolveDataFunctions, resolveManifestEntries, resolvePageCssUrls, resolvePageJsUrls, resolveRegistryModule } from "./runtime-manifest.mjs";
@@ -145,6 +145,14 @@ async function handlePrachtRequest(options) {
 	const url = new URL(options.request.url);
 	const hasDataParam = url.searchParams.get("_data") === "1";
 	if (hasDataParam) url.searchParams.delete("_data");
+	if (typeof __PRACHT_AGENT_SURFACE__ === "undefined" || __PRACHT_AGENT_SURFACE__) {
+		if (options.app.agents?.mcp?.auth && url.pathname.includes("/.well-known/oauth-protected-resource")) {
+			const resolvedMetadataAuth = getResolvedApp(options.app).agents?.mcp?.auth;
+			if (!resolvedMetadataAuth) throw new Error("Resolved MCP OAuth configuration is missing.");
+			const mcpAuthRuntime = await import("./runtime-mcp.mjs");
+			if (mcpAuthRuntime.isMcpResourceMetadataPath(url.pathname, resolvedMetadataAuth)) return withDefaultSecurityHeaders(await mcpAuthRuntime.handleMcpMetadataRequest(options.request, resolvedMetadataAuth));
+		}
+	}
 	const routePathname = stripBase(url.pathname);
 	if (routePathname === null) return withDefaultSecurityHeaders(new Response("Not found", {
 		status: 404,
@@ -192,9 +200,18 @@ async function handlePrachtRequest(options) {
 		}
 		if (capabilityRuntime && (hasCapabilities || mcpConfig)) capabilityRuntime.setActiveCapabilityHost(options.request, options.app, registry, "http", options.onCapabilityAudit, agent);
 	} else if (hasCapabilities || options.app.agents) warnAgentSurfaceElided();
+	const configuredMcpEndpoint = mcpConfig?.path ?? "/mcp";
+	const normalizedRoutePath = routePathname.length > 1 && routePathname.endsWith("/") ? routePathname.slice(0, -1) : routePathname;
+	const normalizedMcpEndpoint = configuredMcpEndpoint.length > 1 && configuredMcpEndpoint.endsWith("/") ? configuredMcpEndpoint.slice(0, -1) : configuredMcpEndpoint;
+	const targetsMcpEndpoint = !!mcpConfig && normalizedRoutePath === normalizedMcpEndpoint;
+	const isMcpRequest = targetsMcpEndpoint && !!mcpRuntime;
 	if (options.apiRoutes?.length) {
 		const apiMatch = matchApiRoute(options.apiRoutes, routePathname);
 		if (apiMatch) {
+			if (targetsMcpEndpoint) return withDefaultSecurityHeaders(new Response(exposeDiagnostics ? `API route ${JSON.stringify(apiMatch.route.path)} collides with the configured remote MCP endpoint.` : "Internal Server Error", {
+				status: 500,
+				headers: { "content-type": "text/plain; charset=utf-8" }
+			}));
 			const apiMiddlewareFiles = (options.app.api.middleware ?? []).flatMap((name) => {
 				const middlewareFile = options.app.middleware[name];
 				return middlewareFile ? [middlewareFile] : [];
@@ -255,14 +272,13 @@ async function handlePrachtRequest(options) {
 			}
 		}
 	}
-	const isMcpRequest = !!mcpConfig && !!mcpRuntime && mcpRuntime.normalizeMcpRequestPath(routePathname) === mcpRuntime.resolveMcpEndpoint(options.app.agents);
 	if (capabilityRuntime && (hasCapabilities || isMcpRequest)) {
 		if (isMcpRequest) capabilityRuntime.setActiveCapabilityHost(options.request, options.app, registry, "mcp", options.onCapabilityAudit, agent);
 		const { CAPABILITY_HTTP_PREFIX, envelopeResponse, handleCapabilityRequest, isRegisteredCapabilityHttpPath, matchCapabilityRoute, resolveAppCapabilities } = capabilityRuntime;
 		let capabilities = hasCapabilities ? null : [];
 		let capabilityResolutionError;
 		try {
-			if (hasCapabilities) capabilities = await resolveAppCapabilities(options.app, registry);
+			if (hasCapabilities && !isMcpRequest) capabilities = await resolveAppCapabilities(options.app, registry);
 		} catch (error) {
 			capabilityResolutionError = error;
 			warnCapabilityResolutionFailure(error);
@@ -277,6 +293,14 @@ async function handlePrachtRequest(options) {
 		if (isMcpRequest && mcpConfig && mcpRuntime) return withDefaultSecurityHeaders(await mcpRuntime.handleMcpRequest({
 			app: options.app,
 			capabilities: capabilities ?? [],
+			loadCapabilities: hasCapabilities ? async () => {
+				try {
+					return await resolveAppCapabilities(options.app, registry);
+				} catch (error) {
+					warnCapabilityResolutionFailure(error);
+					throw error;
+				}
+			} : void 0,
 			context: requestContext,
 			registry,
 			request: options.request,

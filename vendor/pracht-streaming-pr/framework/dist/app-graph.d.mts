@@ -76,6 +76,17 @@ interface AppGraph {
    * graph but nothing serves it.
    */
   mcpEndpoint?: string | null;
+  /** `agents.mcp.destructive` — whether the endpoint serves destructive tools. */
+  mcpDestructive?: boolean;
+  /** Whether the served remote MCP endpoint requires an OAuth bearer token. */
+  mcpAuthenticated?: boolean;
+  /**
+   * Whether the inspected MCP runtime is ready, blocked by a verified runtime
+   * precondition, unverified, or not configured.
+   */
+  mcpRuntimeStatus?: "blocked" | "not-configured" | "ready" | "unverified";
+  /** Locally unmet preconditions; interpret them with `mcpRuntimeStatus`. */
+  mcpUnavailableReasons?: string[];
   routes: AppGraphRoute[];
   /**
    * The app-level not-found page, serialized like a route. `null` when the app
@@ -87,6 +98,14 @@ interface AppGraph {
 interface AppGraphModuleAccess {
   /** Import an app module by its app-relative file path (e.g. Vite's `ssrLoadModule`). */
   loadModule: (file: string) => Promise<Record<string, unknown>>;
+  /**
+   * Import setup middleware before runtime preconditions are inspected. Kept
+   * separate because generated registries split capability and middleware
+   * modules into distinct glob maps.
+   */
+  loadSetupModule?: (file: string) => Promise<Record<string, unknown>>;
+  /** Load and validate the configured MCP OAuth verifier with production registry semantics. */
+  verifyMcpTokenVerifier?: () => Promise<void>;
   /** Read an app module's source text — fallback method detection when importing fails. */
   readSource: (file: string) => string;
 }
@@ -115,6 +134,15 @@ declare function serializeApiRoutes(apiRoutes: readonly ResolvedApiRoute[], acce
  */
 declare function serializeApiRoutesStatic(apiRoutes: readonly ResolvedApiRoute[], access: AppGraphStaticModuleAccess): Promise<AppGraphApiRoute[]>;
 declare function serializeCapabilities(capabilities: Record<string, string> | undefined, access: AppGraphModuleAccess, options?: SerializeCapabilitiesOptions): Promise<AppGraphCapability[]>;
+/** Whether the configured projection actually has a destructive MCP tool to serve. */
+declare function servesDestructiveMcpTools(app: Pick<ResolvedPrachtApp, "agents">, capabilities: readonly AppGraphCapability[]): boolean;
+/**
+ * Server-only middleware modules whose top-level setup may satisfy destructive
+ * MCP preconditions. This mirrors the runtime endpoint: app API middleware and
+ * named middleware applied to a served destructive capability are startup
+ * inputs; unrelated registered middleware remains lazy.
+ */
+declare function destructiveMcpSetupMiddlewareFiles(app: Pick<ResolvedPrachtApp, "agents"> & Partial<Pick<ResolvedPrachtApp, "api" | "middleware">>, capabilities: readonly AppGraphCapability[]): string[];
 declare function buildAppGraph(options: {
   apiRoutes?: readonly ResolvedApiRoute[];
   app: ResolvedPrachtApp;
@@ -129,4 +157,4 @@ declare function detectApiExports(file: string, access: AppGraphModuleAccess): P
 declare function detectApiExportsStatic(file: string, access: AppGraphStaticModuleAccess, seen?: Set<string>): Promise<ApiRouteExports>;
 declare function detectApiMethods(file: string, access: AppGraphModuleAccess): Promise<HttpMethod[]>;
 //#endregion
-export { ApiRouteExports, AppGraph, AppGraphApiRoute, AppGraphCapability, AppGraphModuleAccess, AppGraphRoute, AppGraphStaticModuleAccess, SerializeApiRoutesOptions, SerializeCapabilitiesOptions, buildAppGraph, detectApiExports, detectApiExportsStatic, detectApiMethods, serializeApiRoutes, serializeApiRoutesStatic, serializeAppRoutes, serializeCapabilities };
+export { ApiRouteExports, AppGraph, AppGraphApiRoute, AppGraphCapability, AppGraphModuleAccess, AppGraphRoute, AppGraphStaticModuleAccess, SerializeApiRoutesOptions, SerializeCapabilitiesOptions, buildAppGraph, destructiveMcpSetupMiddlewareFiles, detectApiExports, detectApiExportsStatic, detectApiMethods, serializeApiRoutes, serializeApiRoutesStatic, serializeAppRoutes, serializeCapabilities, servesDestructiveMcpTools };

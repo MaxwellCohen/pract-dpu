@@ -1,5 +1,5 @@
-import { PRESERVE_SCROLL_ATTRIBUTE } from "./runtime-constants.mjs";
 import { stripBase } from "./base.mjs";
+import { PRESERVE_SCROLL_ATTRIBUTE } from "./runtime-constants.mjs";
 import { buildHrefUntyped, matchResolvedRoute } from "./route-matching.mjs";
 import { IS_STATIC_TARGET } from "./runtime-static.mjs";
 import { fetchPrachtRouteState, parseSafeNavigationUrl, routeNeedsServerFetch } from "./runtime-client-fetch.mjs";

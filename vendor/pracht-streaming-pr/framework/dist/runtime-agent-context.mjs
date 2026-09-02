@@ -1,6 +1,7 @@
 //#region src/runtime-agent-context.ts
 const agentIdentitySnapshots = /* @__PURE__ */ new WeakSet();
 const boundAgentContexts = /* @__PURE__ */ new WeakMap();
+const boundMcpTokenContexts = /* @__PURE__ */ new WeakMap();
 /**
 * Bind framework-verified agent identity onto an application request context.
 * The framework-owned field and its value are immutable snapshots, so
@@ -46,7 +47,7 @@ function bindAgentContext(supplied, agent) {
 		if (descriptor && (!("value" in descriptor) || descriptor.value !== null)) throw new TypeError("Pracht cannot safely replace an immutable application-owned agent field on the supplied request context. Create a fresh context without an application-owned agent field.");
 		if (!descriptor && Reflect.has(context, "agent")) throw new TypeError("Pracht cannot safely replace an inherited application-owned agent field on the supplied request context. Create a fresh context without an application-owned agent field.");
 		assertOverlayableContext(context);
-		const overlay = immutableAgentContext(context, boundAgent);
+		const overlay = immutableFrameworkContext(context, { agent: boundAgent });
 		const binding = {
 			agent: boundAgent,
 			context: overlay
@@ -57,13 +58,82 @@ function bindAgentContext(supplied, agent) {
 	}
 	return Object.freeze({ agent: boundAgent });
 }
+const requestContextOverlays = /* @__PURE__ */ new WeakSet();
+/**
+* Create a fresh request-local view over an adapter-supplied context.
+*
+* Reads and receiver-sensitive methods still reach the supplied object, while
+* framework-owned fields and otherwise-new writes stay on this request's
+* overlay. This lets adapters reuse a base context without carrying identity
+* from one request into the next.
+*/
+function isolateRequestContext(context) {
+	if ((typeof context !== "object" || context === null) && typeof context !== "function") return context;
+	return isolateRequestContextWithFields(context, {});
+}
+function isolateRequestContextWithFields(context, frameworkFields, allowShadowedFrameworkFields = false) {
+	assertOverlayableContext(context);
+	const overlay = immutableFrameworkContext(context, frameworkFields, allowShadowedFrameworkFields);
+	requestContextOverlays.add(overlay);
+	return overlay;
+}
+/** @internal Whether this context is already a request-local overlay. */
+function isRequestContextOverlay(context) {
+	return (typeof context === "object" && context !== null || typeof context === "function") && requestContextOverlays.has(context);
+}
+/**
+* Bind a framework-verified OAuth principal onto a request-local context.
+* Rebinding the same framework-owned overlay is idempotent so an MCP tool can
+* pass its context to a nested capability. Any application-owned or inherited
+* `tokenAuth` field still fails closed.
+*/
+function bindMcpTokenContext(context, principal) {
+	if ((typeof context !== "object" || context === null) && typeof context !== "function") return Object.freeze({ tokenAuth: principal });
+	const previous = boundMcpTokenContexts.get(context);
+	if (previous) {
+		if (previous.principal === principal) return previous.context;
+		throw new TypeError("Pracht request contexts cannot be reused across different verified OAuth principals. Create a fresh context for each request.");
+	}
+	const requestContext = isRequestContextOverlay(context) ? context : isolateRequestContext(context);
+	const target = requestContext;
+	if (Reflect.getOwnPropertyDescriptor(target, "tokenAuth") || Reflect.has(target, "tokenAuth")) throw new TypeError("Pracht cannot replace an application-owned `tokenAuth` field on the supplied request context. The field is reserved for the framework — rename yours.");
+	try {
+		Object.defineProperty(target, "tokenAuth", {
+			configurable: false,
+			enumerable: true,
+			value: principal,
+			writable: false
+		});
+	} catch {
+		throw new TypeError("Pracht could not bind the verified token principal to a frozen or sealed request context. Create a fresh mutable request context for each request.");
+	}
+	const binding = {
+		principal,
+		context: target
+	};
+	boundMcpTokenContexts.set(target, binding);
+	return requestContext;
+}
+/** @internal Reassert the transport principal over nested caller-supplied context. */
+function rebindMcpTokenContext(context, principal) {
+	if ((typeof context !== "object" || context === null) && typeof context !== "function") return Object.freeze({ tokenAuth: principal });
+	const previous = boundMcpTokenContexts.get(context);
+	if (previous?.principal === principal) return previous.context;
+	const requestContext = isolateRequestContextWithFields(context, { tokenAuth: principal }, true);
+	const binding = {
+		principal,
+		context: requestContext
+	};
+	boundMcpTokenContexts.set(requestContext, binding);
+	return requestContext;
+}
 /**
 * Add framework-owned fields without manufacturing a fake class instance.
 * Copying descriptors onto `Object.create(instancePrototype)` loses private
 * fields. This overlay keeps application writes local while forwarding reads
 * to the original receiver; prototype methods are bound for the same reason.
 */
-function immutableAgentContext(context, agent) {
+function immutableFrameworkContext(context, frameworkFields, allowShadowedFrameworkFields = false) {
 	const prototype = Object.getPrototypeOf(context);
 	const materializedContextKeys = /* @__PURE__ */ new Set();
 	const isArrayContext = Array.isArray(context);
@@ -83,10 +153,11 @@ function immutableAgentContext(context, agent) {
 		if (descriptor && Reflect.defineProperty(target, "length", descriptor)) materializedContextKeys.add("length");
 	}
 	Object.setPrototypeOf(target, prototype);
-	Object.defineProperty(target, "agent", {
+	const reservedFields = new Set(Reflect.ownKeys(frameworkFields));
+	for (const property of reservedFields) Object.defineProperty(target, property, {
 		configurable: false,
 		enumerable: true,
-		value: agent,
+		value: frameworkFields[property],
 		writable: false
 	});
 	const boundMethods = /* @__PURE__ */ new WeakMap();
@@ -100,11 +171,11 @@ function immutableAgentContext(context, agent) {
 			let guarded;
 			guarded = new Proxy(method, {
 				apply(target, _thisArg, args) {
-					assertNoInheritedAgentField();
+					assertNoInheritedFrameworkField();
 					return Reflect.apply(target, context, args);
 				},
 				construct(_target, args, newTarget) {
-					assertNoInheritedAgentField();
+					assertNoInheritedFrameworkField();
 					return Reflect.construct(method, args, newTarget === guarded ? method : newTarget);
 				}
 			});
@@ -120,7 +191,7 @@ function immutableAgentContext(context, agent) {
 		if (!bound) {
 			const receiverBound = accessor.bind(context);
 			bound = (...args) => {
-				assertNoInheritedAgentField();
+				assertNoInheritedFrameworkField();
 				return Reflect.apply(receiverBound, void 0, args);
 			};
 			boundAccessors.set(accessor, bound);
@@ -170,8 +241,9 @@ function immutableAgentContext(context, agent) {
 		const contextPrototype = Reflect.getPrototypeOf(context);
 		return Reflect.getPrototypeOf(target) === contextPrototype || Reflect.setPrototypeOf(target, contextPrototype);
 	};
-	function assertNoInheritedAgentField() {
-		if (!Object.prototype.hasOwnProperty.call(context, "agent") && Reflect.has(context, "agent")) throw new TypeError("Pracht detected an inherited application-owned agent field after binding the request context. The agent field is reserved for the framework.");
+	function assertNoInheritedFrameworkField() {
+		if (allowShadowedFrameworkFields) return;
+		for (const property of reservedFields) if (!Object.prototype.hasOwnProperty.call(context, property) && Reflect.has(context, property)) throw new TypeError(`Pracht detected an inherited application-owned ${String(property)} field after binding the request context. The ${String(property)} field is reserved for the framework.`);
 	}
 	let proxy;
 	proxy = new Proxy(target, {
@@ -191,7 +263,7 @@ function immutableAgentContext(context, agent) {
 		},
 		get(target, property, receiver) {
 			if (Object.prototype.hasOwnProperty.call(target, property) && !materializedContextKeys.has(property)) return Reflect.get(target, property, receiver);
-			if (property !== "agent") assertNoInheritedAgentField();
+			if (!reservedFields.has(property)) assertNoInheritedFrameworkField();
 			const value = Reflect.get(context, property, context);
 			if (typeof value !== "function" || property === "constructor") return value;
 			const targetDescriptor = materializedContextKeys.has(property) ? Reflect.getOwnPropertyDescriptor(target, property) : void 0;
@@ -320,7 +392,7 @@ function assertOverlayableContext(context) {
 	if (typeof context === "function" || Array.isArray(context)) return;
 	const nativeContext = nativeInternalSlotContext(context);
 	if (!nativeContext) return;
-	throw new TypeError(`Pracht cannot safely bind agent identity to an immutable [object ${nativeContext}] request context because an overlay cannot preserve its native internal slots. Wrap the value in a fresh mutable request context object.`);
+	throw new TypeError(`Pracht cannot safely create a request-local overlay for an [object ${nativeContext}] request context because an overlay cannot preserve its native internal slots. Wrap the value in a fresh mutable request context object.`);
 }
 function nativeInternalSlotContext(context) {
 	let prototype = Reflect.getPrototypeOf(context);
@@ -367,4 +439,4 @@ function hasPrototypeSetter(context, property) {
 	return false;
 }
 //#endregion
-export { bindAgentContext, snapshotAgentIdentity };
+export { bindAgentContext, bindMcpTokenContext, rebindMcpTokenContext, snapshotAgentIdentity };

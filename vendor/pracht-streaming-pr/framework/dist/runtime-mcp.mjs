@@ -1,5 +1,10 @@
-import { resolveMcpEndpoint } from "./mcp-config.mjs";
-import { handleCapabilityRequest, setActiveCapabilityHost } from "./runtime-capabilities.mjs";
+import { OAUTH_PROTECTED_RESOURCE_WELL_KNOWN } from "./runtime-constants.mjs";
+import { isMcpResourceMetadataPath, isValidOAuthScopeToken, mcpResourceMetadataPath, mcpResourceMetadataUrl, resolveMcpEndpoint } from "./mcp-config.mjs";
+import { CONFIRMATION_SECRET_ENV, isWellFormedConfirmationToken, resolveConfirmationSecret } from "./runtime-confirmation.mjs";
+import { hasCapabilityApprovalPrincipalResolver, resolveCapabilityApprovalStore } from "./runtime-approval.mjs";
+import { resolveRegistryModule } from "./runtime-manifest.mjs";
+import { clearDestructiveConfirmed, handleCapabilityRequest, setActiveCapabilityHost } from "./runtime-capabilities.mjs";
+import { hasWebBotAuthIdentitySource } from "./runtime-agent-auth.mjs";
 import { CONFIRMATION_HEADER, MCP_CAPABILITY_META_KEY, MCP_CONFIRMATION_META_KEY, MCP_CONFIRMATION_META_KEY as MCP_CONFIRMATION_META_KEY$1, MCP_EFFECT_META_KEY, MCP_ERROR_META_KEY, MCP_LATEST_PROTOCOL_VERSION, MCP_LATEST_PROTOCOL_VERSION as MCP_LATEST_PROTOCOL_VERSION$1, MCP_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSIONS as MCP_PROTOCOL_VERSIONS$1, MCP_PROTOCOL_VERSION_HEADER, MCP_PROTOCOL_VERSION_HEADER as MCP_PROTOCOL_VERSION_HEADER$1, MCP_STATUS_META_KEY, MCP_TOOL_NAME_ERROR, findMcpToolNameCollisions, isValidMcpToolName, mcpToolName } from "@pracht/capabilities";
 //#region src/runtime-mcp.ts
 /**
@@ -20,6 +25,12 @@ import { CONFIRMATION_HEADER, MCP_CAPABILITY_META_KEY, MCP_CONFIRMATION_META_KEY
 * Serving is opt-in via `defineApp({ agents: { mcp: {} } })`; apps that do not
 * configure it never reach this module.
 */
+/**
+* Stand-in for a `_meta` confirmation value that is not even shaped like a
+* token. It has no `.` separators, so `verifyConfirmationToken()` rejects it as
+* `malformed` before any secret is consulted.
+*/
+const MALFORMED_CONFIRMATION_TOKEN = "malformed";
 const JSONRPC_PARSE_ERROR = -32700;
 const JSONRPC_INVALID_REQUEST = -32600;
 const JSONRPC_METHOD_NOT_FOUND = -32601;
@@ -29,9 +40,17 @@ const JSONRPC_INTERNAL_ERROR = -32603;
 function normalizeMcpRequestPath(path) {
 	return path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
 }
-/** Capabilities the MCP projection serves, in graph order. */
-function mcpExposedCapabilities(capabilities) {
-	return capabilities.filter((entry) => entry.capability.expose?.mcp === true && entry.capability.effect !== "destructive");
+/**
+* Capabilities the MCP projection serves, in graph order.
+*
+* `destructive` effects are filtered out unless the app opted in with
+* `agents.mcp.destructive`. The default is the conservative one: a capability
+* that declares `expose.mcp` and is destructive is simply invisible to the
+* transport, exactly as it was before the opt-in existed.
+*/
+function mcpExposedCapabilities(capabilities, mcp) {
+	const allowDestructive = mcp?.destructive === true;
+	return capabilities.filter((entry) => entry.capability.expose?.mcp === true && (allowDestructive || entry.capability.effect !== "destructive"));
 }
 /**
 * Handle one request to the MCP endpoint. Always resolves — protocol problems
@@ -53,6 +72,29 @@ function mcpExposedCapabilities(capabilities) {
 		status: 403,
 		headers: { "content-type": "text/plain; charset=utf-8" }
 	});
+	if (options.mcp.auth) {
+		const authResult = await authenticateMcp(options.mcp.auth, options, request);
+		if (!authResult.ok) return authResult.response;
+		options = {
+			...options,
+			context: authResult.context,
+			tokenPrincipal: authResult.principal
+		};
+		setActiveCapabilityHost(request, options.app, options.registry, "mcp", options.onAudit, options.agent ?? null, authResult.principal);
+	}
+	if (options.loadCapabilities) try {
+		options = {
+			...options,
+			capabilities: await options.loadCapabilities(),
+			loadCapabilities: void 0
+		};
+	} catch (error) {
+		options = {
+			...options,
+			loadCapabilities: void 0,
+			resolutionError: error
+		};
+	}
 	const declaredVersion = request.headers.get(MCP_PROTOCOL_VERSION_HEADER$1);
 	let activeVersion = declaredVersion && isSupportedProtocolVersion(declaredVersion) ? declaredVersion : MCP_LATEST_PROTOCOL_VERSION$1;
 	const respond = (status, payload) => jsonRpcResponse(status, activeVersion, payload);
@@ -120,7 +162,31 @@ function mcpExposedCapabilities(capabilities) {
 			message: `Capability registry failed to resolve${options.exposeErrors && options.resolutionError instanceof Error ? `: ${options.resolutionError.message}` : "."}`
 		}
 	});
-	const exposedCapabilities = mcpExposedCapabilities(options.capabilities);
+	const exposedCapabilities = mcpExposedCapabilities(options.capabilities, options.mcp);
+	const destructiveCapabilities = exposedCapabilities.filter((entry) => entry.capability.effect === "destructive");
+	if (destructiveCapabilities.length > 0) {
+		try {
+			await loadDestructiveMcpRegistrationModules(options, destructiveCapabilities);
+		} catch (error) {
+			return respond(200, {
+				jsonrpc: "2.0",
+				id,
+				error: {
+					code: JSONRPC_INTERNAL_ERROR,
+					message: `Destructive MCP setup modules failed to load${options.exposeErrors && error instanceof Error ? `: ${error.message}` : "."}`
+				}
+			});
+		}
+		const unmet = destructiveMcpPreconditionErrors(options.agents);
+		if (unmet.length > 0) return respond(200, {
+			jsonrpc: "2.0",
+			id,
+			error: {
+				code: JSONRPC_INTERNAL_ERROR,
+				message: `agents.mcp.destructive serves destructive capabilities, but this server cannot run their confirmation flow: ${unmet.join(" ")}`
+			}
+		});
+	}
 	const invalidToolNames = exposedCapabilities.filter((entry) => !isValidMcpToolName(mcpToolName(entry.name)));
 	if (invalidToolNames.length > 0) return respond(200, {
 		jsonrpc: "2.0",
@@ -173,7 +239,7 @@ function mcpExposedCapabilities(capabilities) {
 		case "tools/list": return respond(200, {
 			jsonrpc: "2.0",
 			id,
-			result: { tools: mcpExposedCapabilities(options.capabilities).map(toolDescriptor) }
+			result: { tools: exposedCapabilities.map(toolDescriptor) }
 		});
 		case "tools/call": return handleToolsCall(options, id, message.params, activeVersion);
 		default: return respond(200, {
@@ -186,22 +252,92 @@ function mcpExposedCapabilities(capabilities) {
 		});
 	}
 }
+/**
+* Import the middleware modules that would run before a destructive
+* capability's confirmation gate. Their top-level server setup may register
+* the approval store, confirmation secret, or application-principal resolver;
+* checking process-local registrations before these imports made the endpoint
+* depend on an unrelated request warming the middleware graph first.
+*
+* Importing is enough here. The middleware functions still execute only for a
+* real `tools/call`, through the ordinary capability pipeline.
+*/
+async function loadDestructiveMcpRegistrationModules(options, capabilities) {
+	const files = new Set(options.apiMiddlewareFiles ?? []);
+	for (const capability of capabilities) for (const file of capability.middlewareFiles) files.add(file);
+	await Promise.all([...files].map((file) => resolveRegistryModule(options.registry.middlewareModules, file)));
+}
+/**
+* Everything the prepare/commit flow needs before a destructive tool may be
+* advertised, checked in one place so all three answer the same way. Each of
+* these would otherwise produce the same broken shape: a tool listed in
+* `tools/list` that answers `confirmation_unavailable` on every call.
+*/
+function destructiveMcpPreconditionErrors(agents) {
+	const unmet = [];
+	if (!resolveCapabilityApprovalStore()) unmet.push("no approval store is registered, so commits could not be made exactly-once (call setCapabilityApprovalStore() from a server-only module).");
+	if (!resolveConfirmationSecret()) unmet.push(`no confirmation secret is configured (set ${CONFIRMATION_SECRET_ENV}, or call setCapabilityConfirmationSecret()).`);
+	if (agents?.confirmation?.mode === "human" && !hasWebBotAuthIdentitySource(agents.webBotAuth) && !hasCapabilityApprovalPrincipalResolver()) unmet.push("agents.confirmation.mode is \"human\" but no principal can ever be resolved (configure agents.webBotAuth with a valid 32-byte base64url Ed25519 static key or HTTPS directory, or call setCapabilityApprovalPrincipalResolver() from a server-only module).");
+	return unmet;
+}
+/**
+* Serve the RFC 9728 protected-resource metadata document.
+*
+* Split out so `handlePrachtRequest()` can route the well-known path without
+* knowing anything about OAuth, and so the whole auth module stays behind a
+* dynamic import that apps with an unauthenticated `/mcp` never take.
+*/
+async function handleMcpMetadataRequest(request, auth) {
+	const { handleMcpResourceMetadataRequest } = await import("./runtime-mcp-auth.mjs");
+	return handleMcpResourceMetadataRequest(request, auth);
+}
+async function authenticateMcp(auth, options, request) {
+	const { authenticateMcpRequest, bindMcpTokenContext } = await import("./runtime-mcp-auth.mjs");
+	const result = await authenticateMcpRequest({
+		auth,
+		registry: options.registry,
+		request
+	});
+	if (!result.ok) return result;
+	try {
+		return {
+			ok: true,
+			principal: result.principal,
+			context: bindMcpTokenContext(options.context, result.principal)
+		};
+	} catch (error) {
+		console.error("[pracht] Could not bind the verified MCP token principal to the request context.", error);
+		return {
+			ok: false,
+			response: new Response(options.exposeErrors ? `Request context could not carry the verified token principal: ${error instanceof Error ? error.message : String(error)}` : "Internal Server Error", {
+				status: 500,
+				headers: { "content-type": "text/plain; charset=utf-8" }
+			})
+		};
+	}
+}
 function toolDescriptor(entry) {
 	const { capability } = entry;
+	const destructive = capability.effect === "destructive";
 	return {
 		name: mcpToolName(entry.name),
 		title: capability.title,
-		description: capability.description,
+		description: destructive ? `${capability.description}\n\nDestructive: the first call returns "confirmation_required" with a confirmation token and changes nothing. To commit, repeat the call with identical arguments and the token in _meta[${JSON.stringify(MCP_CONFIRMATION_META_KEY$1)}]. A token works once.` : capability.description,
 		inputSchema: capability.input,
 		outputSchema: capability.output,
 		annotations: {
 			readOnlyHint: capability.effect === "read",
 			...capability.effect === "read" ? { destructiveHint: false } : {},
+			...destructive ? { destructiveHint: true } : {},
 			idempotentHint: capability.effect === "read"
 		},
 		_meta: {
 			[MCP_CAPABILITY_META_KEY]: entry.name,
-			[MCP_EFFECT_META_KEY]: capability.effect
+			[MCP_EFFECT_META_KEY]: capability.effect,
+			...destructive ? { [MCP_CONFIRMATION_META_KEY$1]: {
+				required: true,
+				metaKey: MCP_CONFIRMATION_META_KEY$1
+			} } : {}
 		}
 	};
 }
@@ -223,7 +359,7 @@ async function handleToolsCall(options, id, rawParams, protocolVersion) {
 			message: "tools/call `arguments` must be an object when provided."
 		}
 	});
-	const exposed = mcpExposedCapabilities(options.capabilities);
+	const exposed = mcpExposedCapabilities(options.capabilities, options.mcp);
 	const match = exposed.find((entry) => mcpToolName(entry.name) === params.name);
 	if (!match) return jsonRpcResponse(200, protocolVersion, {
 		jsonrpc: "2.0",
@@ -234,22 +370,27 @@ async function handleToolsCall(options, id, rawParams, protocolVersion) {
 		}
 	});
 	const capabilityRequest = synthesizeCapabilityRequest(options, match, params.arguments, params._meta);
-	setActiveCapabilityHost(capabilityRequest, options.app, options.registry, "mcp", options.onAudit, options.agent ?? null);
+	setActiveCapabilityHost(capabilityRequest, options.app, options.registry, "mcp", options.onAudit, options.agent ?? null, options.tokenPrincipal, options.request);
 	const capabilityUrl = new URL(capabilityRequest.url);
-	const response = await handleCapabilityRequest({
-		match,
-		context: options.context,
-		registry: options.registry,
-		request: capabilityRequest,
-		url: capabilityUrl,
-		pathname: capabilityUrl.pathname,
-		exposeErrors: options.exposeErrors,
-		apiMiddlewareFiles: options.apiMiddlewareFiles,
-		agents: options.agents,
-		agent: options.agent ?? null,
-		transport: "mcp",
-		onAudit: options.onAudit
-	});
+	let response;
+	try {
+		response = await handleCapabilityRequest({
+			match,
+			context: options.context,
+			registry: options.registry,
+			request: capabilityRequest,
+			url: capabilityUrl,
+			pathname: capabilityUrl.pathname,
+			exposeErrors: options.exposeErrors,
+			apiMiddlewareFiles: options.apiMiddlewareFiles,
+			agents: options.agents,
+			agent: options.agent ?? null,
+			transport: "mcp",
+			onAudit: options.onAudit
+		});
+	} finally {
+		clearDestructiveConfirmed(capabilityRequest);
+	}
 	let envelope;
 	try {
 		const parsed = await response.json();
@@ -284,7 +425,7 @@ function synthesizeCapabilityRequest(options, match, args, meta) {
 	const authorization = options.request.headers.get("authorization");
 	if (authorization) headers.set("authorization", authorization);
 	const confirmation = meta?.[MCP_CONFIRMATION_META_KEY$1];
-	if (typeof confirmation === "string" && confirmation !== "") headers.set(CONFIRMATION_HEADER, confirmation);
+	if (typeof confirmation === "string" && confirmation !== "") headers.set(CONFIRMATION_HEADER, isWellFormedConfirmationToken(confirmation) ? confirmation : MALFORMED_CONFIRMATION_TOKEN);
 	const path = match.httpPath ?? `/__pracht/mcp/tools/${mcpToolName(match.name)}`;
 	return new Request(new URL(path, options.url.origin).href, {
 		method: "POST",
@@ -312,6 +453,7 @@ function toolResult(match, envelope, status) {
 	const { error } = envelope;
 	const lines = [`${error.code}: ${error.message}`];
 	if (error.issues?.length) lines.push(...error.issues.map((issue) => `- ${issue.path || "(root)"}: ${issue.message}`));
+	if (error.confirmationToken) lines.push(`Confirmation token (pass as _meta[${JSON.stringify(MCP_CONFIRMATION_META_KEY$1)}] on an identical call): ${error.confirmationToken}`);
 	return {
 		content: [{
 			type: "text",
@@ -324,7 +466,11 @@ function toolResult(match, envelope, status) {
 			[MCP_ERROR_META_KEY]: {
 				code: error.code,
 				message: error.message,
-				...error.issues ? { issues: error.issues } : {}
+				...error.issues ? { issues: error.issues } : {},
+				...error.confirmationToken ? { confirmationToken: error.confirmationToken } : {},
+				...error.expiresAt !== void 0 ? { expiresAt: error.expiresAt } : {},
+				...error.approvalId ? { approvalId: error.approvalId } : {},
+				...error.retryAfterSeconds !== void 0 ? { retryAfterSeconds: error.retryAfterSeconds } : {}
 			}
 		}
 	};
@@ -379,4 +525,4 @@ function jsonRpcResponse(status, protocolVersion, body) {
 	});
 }
 //#endregion
-export { MCP_CONFIRMATION_META_KEY, MCP_LATEST_PROTOCOL_VERSION, MCP_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSION_HEADER, handleMcpRequest, mcpExposedCapabilities, normalizeMcpRequestPath, resolveMcpEndpoint };
+export { MCP_CONFIRMATION_META_KEY, MCP_LATEST_PROTOCOL_VERSION, MCP_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSION_HEADER, OAUTH_PROTECTED_RESOURCE_WELL_KNOWN, destructiveMcpPreconditionErrors, handleMcpMetadataRequest, handleMcpRequest, isMcpResourceMetadataPath, isValidOAuthScopeToken, mcpExposedCapabilities, mcpResourceMetadataPath, mcpResourceMetadataUrl, normalizeMcpRequestPath, resolveMcpEndpoint };
