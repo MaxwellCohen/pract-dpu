@@ -54,3 +54,37 @@ export function readSleep(key: string, ms: number): void {
   }
   use(ready);
 }
+
+/** Client-side promise cache for race demos (no request-scoped map in the browser). */
+const clientResources = new Map<string, Promise<void>>();
+
+/**
+ * Suspend on both server and client with different delays.
+ * Use a long `serverMs` and short `clientMs` so hydration can resolve the
+ * boundary while the HTML stream for that slot is still open — the race that
+ * can duplicate DOM when the late `<template for>` also patches in.
+ */
+export function readSleepRace(
+  key: string,
+  serverMs: number,
+  clientMs: number,
+): void {
+  let ready: Promise<void>;
+  if (typeof window === "undefined") {
+    const map = getRequestFlags().resources;
+    let promise = map.get(key);
+    if (!promise) {
+      promise = sleep(serverMs);
+      map.set(key, promise);
+    }
+    ready = promise;
+  } else {
+    let promise = clientResources.get(key);
+    if (!promise) {
+      promise = sleep(clientMs);
+      clientResources.set(key, promise);
+    }
+    ready = promise;
+  }
+  use(ready);
+}

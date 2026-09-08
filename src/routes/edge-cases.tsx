@@ -2,7 +2,7 @@ import { Suspense } from "@pracht/core";
 import type { ComponentChildren } from "preact";
 import { CaseCompare } from "../components/case-compare";
 import { ExampleShell } from "../components/example-shell";
-import { readSleep } from "../lib/request-flags";
+import { readSleep, readSleepRace } from "../lib/request-flags";
 
 const POPCORN_KERNELS = [
   { id: 0, delayMs: 420 },
@@ -82,6 +82,34 @@ function DelayedStyled() {
   );
 }
 
+function RaceFallback() {
+  return (
+    <p class="animate-pulse rounded bg-zinc-200 px-3 py-2 text-sm text-zinc-600">
+      Waiting — server still streaming…
+    </p>
+  );
+}
+
+function RaceDone() {
+  return (
+    <p
+      data-race-done
+      class="rounded bg-emerald-200 px-3 py-2 text-sm font-bold text-emerald-950"
+    >
+      Resolved once
+    </p>
+  );
+}
+
+/**
+ * Server sleeps ~3s (keeps the stream open); client sleeps ~150ms then paints.
+ * If the late streamed template also patches, you get two "Resolved once" nodes.
+ */
+function DelayedClientRace() {
+  readSleepRace("edge-client-race", 3000, 150);
+  return <RaceDone />;
+}
+
 function SvgStage({ children }: { children: ComponentChildren }) {
   return (
     <div class="relative h-[100px] w-[160px] overflow-hidden rounded-lg border-2 border-dashed border-zinc-300 text-zinc-700">
@@ -105,7 +133,7 @@ export function Component() {
   return (
     <ExampleShell
       title="Edge cases"
-      description="Popcorning plus the HTML, SVG, MathML, and style completions that DPU struggles with. Left column is the live stream; right column is the settled target."
+      description="Popcorning, client-vs-stream race, plus the HTML, SVG, MathML, and style completions that DPU struggles with. Left column is the live stream; right column is the settled target."
     >
       <CaseCompare
         title="Popcorning"
@@ -129,6 +157,20 @@ export function Component() {
             ))}
           </div>
         }
+      />
+
+      <CaseCompare
+        title="Client resolves while stream pending"
+        why="Hydration can finish the Suspense promise on the client before the server has streamed that boundary’s <template for>. Client paint + late declarative patch both apply → duplicated DOM."
+        expected='Exactly one “Resolved once” node. Fail: two copies after the ~3s stream catches up (client painted early, then the template patched again).'
+        badge="warn"
+        badgeLabel="May duplicate"
+        streamed={
+          <Suspense fallback={<RaceFallback />}>
+            <DelayedClientRace />
+          </Suspense>
+        }
+        result={<RaceDone />}
       />
 
       <CaseCompare

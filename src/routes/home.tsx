@@ -24,7 +24,7 @@ const examples = [
   {
     route: "edge-cases",
     title: "Edge cases",
-    body: "Popcorning plus HTML, SVG, MathML, and streamed styles — live stream beside the expected result.",
+    body: "Popcorning, client-vs-stream duplication race, plus HTML, SVG, MathML, and streamed styles — live stream beside the expected result.",
   },
 ] as const;
 
