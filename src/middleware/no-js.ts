@@ -17,7 +17,7 @@ export const middleware: MiddlewareFn = async ({ request, url }, next) => {
   const noJs = isNoJsEnabled(request);
   const path = url.pathname || "/";
 
-  setRequestFlags({ noJs, path });
+  setRequestFlags({ noJs, path, search: url.search });
   try {
     const response = await next();
     // Do not clear flags or wrap `response.body` here. Streaming SSR keeps

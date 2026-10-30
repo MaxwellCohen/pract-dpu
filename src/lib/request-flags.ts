@@ -4,6 +4,7 @@ import { sleep } from "./sleep";
 export type RequestFlags = {
   noJs: boolean;
   path: string;
+  search: string;
   /** Per-request promises so Suspense remounts reuse the same `use()` input. */
   resources: Map<string, Promise<void>>;
 };
@@ -11,6 +12,7 @@ export type RequestFlags = {
 const defaults: RequestFlags = {
   noJs: false,
   path: "/",
+  search: "",
   resources: new Map(),
 };
 

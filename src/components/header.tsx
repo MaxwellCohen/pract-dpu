@@ -7,6 +7,8 @@ const links = [
   { route: "nested", label: "Nested" },
   { route: "out-of-order", label: "Out of order" },
   { route: "edge-cases", label: "Edge cases" },
+  { route: "races", label: "Races" },
+  { route: "special", label: "Special" },
 ] as const;
 
 export function Header() {

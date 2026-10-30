@@ -26,6 +26,8 @@ export const app = defineApp({
         }),
         route("/grid", "./routes/grid.tsx", { id: "grid" }),
         route("/edge-cases", "./routes/edge-cases.tsx", { id: "edge-cases" }),
+        route("/races", "./routes/races.tsx", { id: "races" }),
+        route("/special", "./routes/special.tsx", { id: "special" }),
       ],
     ),
   ],

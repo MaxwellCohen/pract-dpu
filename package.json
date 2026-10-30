@@ -5,6 +5,7 @@
     "@pracht/core": "file:vendor/pracht-streaming-pr/framework"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@pracht/cli": "file:vendor/pracht-streaming-pr/cli",
     "@pracht/vite-plugin": "file:vendor/pracht-streaming-pr/vite-plugin",
     "@tailwindcss/vite": "^4.3.3",
@@ -37,7 +38,9 @@
     "build": "pracht build",
     "dev": "pracht dev --port 3004",
     "typecheck": "tsc --noEmit",
-    "deploy": "pracht build && vercel deploy --prebuilt"
+    "deploy": "pracht build && vercel deploy --prebuilt",
+    "test": "playwright test",
+    "test:install": "playwright install chromium"
   },
   "type": "module",
   "version": "0.0.0"

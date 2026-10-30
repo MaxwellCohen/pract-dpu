@@ -37,3 +37,13 @@ This app uses **manifest routing**.
 
 - `.claude/skills/` — pracht Claude Code skills (audits, scaffolds, testing, debugging); invoke with `/<skill-name>`
 - `.mcp.json` — registers the `pracht mcp` server so MCP clients can inspect the app graph, run doctor/verify, and scaffold natively
+
+## Verifying DPU/streaming behaviour (for agents)
+
+- Scenario fixtures: `src/routes/races.tsx`, `src/routes/special.tsx` (`Scenario` card, `data-scenario` ids).
+- Suite: `tests/*.spec.ts`; run `pnpm test:install && pnpm test`; results in `results/results.json`.
+- Isolate a scenario with `/<route>?only=<id>`. Prefer this when a page hangs.
+- Known, understood failures are `test.fail(...)` and listed in `KNOWN_ISSUES.md`. Do not "fix" a test by
+  deleting its expectation; if behaviour changed, update `KNOWN_ISSUES.md` with evidence.
+- Do not claim a root cause without a repro; label guesses as hypotheses.
+- Content in this repo was LLM-assisted (see README → Made with LLMs).

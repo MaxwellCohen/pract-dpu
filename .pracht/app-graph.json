@@ -127,6 +127,42 @@
       "shellFile": "./shells/public.tsx",
       "speculation": null,
       "streaming": true
+    },
+    {
+      "file": "./routes/races.tsx",
+      "hydration": null,
+      "id": "races",
+      "loaderCache": null,
+      "loaderFile": null,
+      "middleware": [
+        "no-js"
+      ],
+      "path": "/races",
+      "prefetch": null,
+      "render": "ssr",
+      "revalidate": null,
+      "shell": "public",
+      "shellFile": "./shells/public.tsx",
+      "speculation": null,
+      "streaming": true
+    },
+    {
+      "file": "./routes/special.tsx",
+      "hydration": null,
+      "id": "special",
+      "loaderCache": null,
+      "loaderFile": null,
+      "middleware": [
+        "no-js"
+      ],
+      "path": "/special",
+      "prefetch": null,
+      "render": "ssr",
+      "revalidate": null,
+      "shell": "public",
+      "shellFile": "./shells/public.tsx",
+      "speculation": null,
+      "streaming": true
     }
   ],
   "api": [
